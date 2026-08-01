@@ -1,0 +1,36 @@
+# 1. IDEs & Editors (IntelliJ, VS Code, Eclipse)
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+.springBeans
+
+# 2. Backend (Java / Spring Boot / Maven)
+backend/target/
+backend/*.log
+backend/.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# 3. Frontend (React / Vite / Node)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.eslintcache
+
+# 4. OS-Specific System Files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+
+# 5. Loose Asset/Temp Files at Root
+# Ignores loose image files generated during planning
+*.png
+*.jpg
+*.jpeg
