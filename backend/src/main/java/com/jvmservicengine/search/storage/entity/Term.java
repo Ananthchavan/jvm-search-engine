@@ -21,7 +21,7 @@ public class Term {
     private Long id;
 
     @Column(nullable = false, unique = true, length = 255)
-    private Long term;
+    private String term;
 
     @Column(name = "document_frequency", nullable = false)
     private Integer documentFrequency = 0;
