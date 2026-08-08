@@ -16,5 +16,7 @@ public interface CrawlerQueueRepository extends JpaRepository<CrawlerQueueItem, 
 
     Optional<CrawlerQueueItem> findByUrl(String url);
 
+    Optional<CrawlerQueueItem> findFirstByStatusOrderByPriorityDesc(CrawlStatus status);
+
     List<CrawlerQueueItem> findTop10ByStatusOrderByPriorityDescCrawlDepthAsc(CrawlStatus status);
 }
