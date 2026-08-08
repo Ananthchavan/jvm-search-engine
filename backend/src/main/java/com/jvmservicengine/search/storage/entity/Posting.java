@@ -10,7 +10,13 @@ import lombok.Setter;
             uniqueConstraints = {
                 // A specific word should have only one posting per-page
                 @UniqueConstraint(columnNames = {"page_id", "term_id"})
-            })
+            },
+            indexes = {
+                @Index( name = "idx_posting_trm_id" ,
+                columnList = "term_id"
+                )
+            }
+)
 @Getter
 @Setter
 @NoArgsConstructor

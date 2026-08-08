@@ -11,7 +11,12 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "crawler_queue")
+@Table(name = "crawler_queue",
+            indexes = {
+                @Index(name = "idx_crawler_queue_fetch",
+                columnList = "status, priority, crawl_depth")
+            }
+)
 @Getter
 @Setter
 @NoArgsConstructor
