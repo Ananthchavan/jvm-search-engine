@@ -1,8 +1,10 @@
 package com.jvmservicengine.search.crawler.service;
 
+import com.jvmservicengine.search.api.dto.ParsedPageData;
 import com.jvmservicengine.search.common.enums.CrawlStatus;
 import com.jvmservicengine.search.crawler.jsoup.JsoupWebClient;
 import com.jvmservicengine.search.crawler.robots.RobotsTxtService;
+import com.jvmservicengine.search.parser.service.HtmlParserService;
 import com.jvmservicengine.search.storage.entity.CrawlerQueueItem;
 import com.jvmservicengine.search.storage.entity.Page;
 import com.jvmservicengine.search.storage.repository.PageRepository;
@@ -29,6 +31,7 @@ public class CrawlerService {
     private final JsoupWebClient jsoupWebClient;
     private final RobotsTxtService robotsTxtService;
     private final RateLimiterService rateLimiterService;
+    private final HtmlParserService htmlParserService;
 
     private static final int MAX_CRAWL_DEPTH = 3;
 
@@ -67,19 +70,27 @@ public class CrawlerService {
 
                 if (docOpt.isPresent()) {
                     Document doc = docOpt.get();
-                    Page page = new Page();
-                    page.setUrl(currentItem.getUrl());
-                    page.setTitle(doc.title());
-                    page.setContentHash(doc.html());
-                    page.setCreatedAt(LocalDateTime.now());
-                    pageRepository.save(page);
+                    String rawHtml = doc.outerHtml();
+                    ParsedPageData parsedData = htmlParserService.parse(rawHtml, currentItem.getUrl());
 
-                    if (currentItem.getCrawlDepth() < MAX_CRAWL_DEPTH) {
-                        extractAndQueueLinks(doc, currentItem.getCrawlDepth() + 1);
+                    if (parsedData != null) {
+                        Page page = new Page();
+                        page.setUrl(currentItem.getUrl());
+                        page.setTitle(parsedData.title());
+                        page.setContentHash(parsedData.bodyText());
+                        page.setCreatedAt(LocalDateTime.now());
+                        pageRepository.save(page);
+
+                        if (currentItem.getCrawlDepth() < MAX_CRAWL_DEPTH) {
+                            for (String nextUrl : parsedData.outgoingLinks()) {
+                                queueService.addUrlToQueue(nextUrl, currentItem.getCrawlDepth() + 1, 50);
+                            }
+                        }
+
                     }
 
                     queueService.updateStatus(currentItem, CrawlStatus.DONE);
-                    log.info("Successfully crawled and saved: {}", currentItem.getUrl());
+                    log.info("Successfully crawled, parsed, and saved: {}", currentItem.getUrl());
 
                 } else {
                     queueService.updateStatus(currentItem, CrawlStatus.FAILED);
@@ -90,13 +101,5 @@ public class CrawlerService {
             }
         }
     }
-
-    private void extractAndQueueLinks(Document doc, int nextDepth) {
-        Elements links = doc.select("a[href]");
-
-        for (Element link : links) {
-            String nextUrl = link.absUrl("href");
-            queueService.addUrlToQueue(nextUrl, nextDepth, 50);
-        }
-    }
+    
 }
