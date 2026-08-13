@@ -8,9 +8,11 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class InMemoryTermDictionary implements Dictionary{
 
+    // ensures thread-safe reads and writes
     private final ConcurrentHashMap<String, Long> termToMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, String> idToTermMap = new ConcurrentHashMap<>();
 
+    // ensures thread-safe ID generation
     private final AtomicLong idSequence = new AtomicLong();
 
     @Override
