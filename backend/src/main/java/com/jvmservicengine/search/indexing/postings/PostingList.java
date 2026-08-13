@@ -9,7 +9,7 @@ public class PostingList {
     private final ConcurrentHashMap<Long, IndexPosting> postingsMap;
 
 
-    public PostingList(Long termId, ConcurrentHashMap<Long, IndexPosting> postingMap) {
+    public PostingList(Long termId) {
         this.termId = termId;
         this.postingsMap = new ConcurrentHashMap<>();
     }
