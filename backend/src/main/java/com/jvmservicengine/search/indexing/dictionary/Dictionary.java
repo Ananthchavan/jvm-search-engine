@@ -6,6 +6,8 @@ public interface Dictionary {
 
     String getTerm(Long termId);
 
+    Iterable<Long> getAllTermIds();
+
     Long getTermId(String term);
 
     int getSize();

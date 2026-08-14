@@ -39,4 +39,9 @@ public class InMemoryTermDictionary implements Dictionary{
     public int getSize() {
         return termToMap.size();
     }
+
+    @Override
+    public Iterable<Long> getAllTermIds() {
+        return termToIdMap.keySet();
+    }
 }
