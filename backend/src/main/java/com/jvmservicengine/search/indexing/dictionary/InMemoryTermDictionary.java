@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class InMemoryTermDictionary implements Dictionary{
 
     // ensures thread-safe reads and writes
-    private final ConcurrentHashMap<String, Long> termToMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> termToIdMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, String> idToTermMap = new ConcurrentHashMap<>();
 
     // ensures thread-safe ID generation
@@ -18,7 +18,7 @@ public class InMemoryTermDictionary implements Dictionary{
     @Override
     public Long getOrAddTerm(String term) {
         // this ensures that no two threads can create duplicate IDs for the same word
-        return termToMap.computeIfAbsent(term, k -> {
+        return termToIdMap.computeIfAbsent(term, k -> {
             Long newId = idSequence.getAndIncrement();
             idToTermMap.put(newId, k);
             return newId;
@@ -32,12 +32,12 @@ public class InMemoryTermDictionary implements Dictionary{
 
     @Override
     public Long getTermId(String term) {
-        return termToMap.get(term);
+        return termToIdMap.get(term);
     }
 
     @Override
     public int getSize() {
-        return termToMap.size();
+        return termToIdMap.size();
     }
 
     @Override
