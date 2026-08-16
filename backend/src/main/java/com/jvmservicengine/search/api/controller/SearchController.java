@@ -1,13 +1,10 @@
 package com.jvmservicengine.search.api.controller;
 
-import com.jvmservicengine.search.api.dto.SearchResultDTO;
-import com.jvmservicengine.search.ranking.RankingService;
+import com.jvmservicengine.search.searches.dto.SearchResponse;
+import com.jvmservicengine.search.searches.service.SearchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/search")
@@ -15,26 +12,22 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*")
 public class SearchController {
 
-    private final RankingService rankingService;
+    private final SearchService searchService;
 
     @GetMapping
-    public ResponseEntity<List<SearchResultDTO>> search(@RequestParam String query) {
+    public ResponseEntity<SearchResponse> search(
+            @RequestParam(name = "q") String query,
+            @RequestParam(name = "page", defaultValue = "1") int page) {
 
-        if(query == null || query.trim().isEmpty()) {
+        if (query == null || query.trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
 
-        List<RankingService.RankedResult> rawResults = rankingService.search(query);
+        int validPage = Math.max(1, page);
 
-        List<SearchResultDTO> response = rawResults.stream()
-                .map(result -> new SearchResultDTO(
-                        result.page().getTitle() != null ? result.page().getTitle() : result.page().getUrl(),
-                        result.page().getUrl(),
-                        result.page().getContentPreview(),
-                        Math.round(result.score() * 100.0) / 100.0
-                ))
-                .limit(50)
-                .collect(Collectors.toList());
+        SearchResponse response = searchService.search(query, validPage);
+
         return ResponseEntity.ok(response);
     }
 }
+
