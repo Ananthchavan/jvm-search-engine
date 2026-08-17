@@ -1,5 +1,6 @@
 package com.jvmservicengine.search.searches.service;
 
+import com.jvmservicengine.search.analytics.searchhistory.SearchHistoryService;
 import com.jvmservicengine.search.indexing.tfidf.TfIdfCalculator;
 import com.jvmservicengine.search.searches.dto.SearchResponse;
 import com.jvmservicengine.search.searches.dto.SearchResultItem;
@@ -28,6 +29,8 @@ public class SearchService {
 
     private final TfIdfCalculator tfIdfCalculator;
     private final SiteStatsRepository siteStatsRepository;
+
+    private final SearchHistoryService searchHistoryService;
 
     private static final int PAGE_SIZE = 10;
 
@@ -88,6 +91,8 @@ public class SearchService {
         }
 
         long executionTime = System.currentTimeMillis() - startTime;
+
+        searchHistoryService.logSearch(rawQuery, totalResults, executionTime, "127.0.0.1", "React Frontend");
 
         return SearchResponse.builder()
                 .originalQuery(rawQuery)

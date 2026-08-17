@@ -1,5 +1,6 @@
 package com.jvmservicengine.search.indexing.service;
 
+import com.jvmservicengine.search.analytics.statistics.SiteStatsService;
 import com.jvmservicengine.search.indexing.dictionary.Dictionary;
 import com.jvmservicengine.search.indexing.invertedindex.InMemoryInvertedIndex;
 import com.jvmservicengine.search.indexing.postings.IndexPosting;
@@ -29,6 +30,7 @@ public class IndexingService {
     private final TermRepository termRepository;
     private final PostingRepository postingRepository;
     private final PageRepository pageRepository;
+    private final SiteStatsService siteStatsService;
 
     // ensures that if the database crashes halfway, entire batch is rolled back
     @Transactional
@@ -67,6 +69,9 @@ public class IndexingService {
         log.info("Successfully flushed {} postings to database", dbPostingToSave.size());
 
         inMemoryIndex.clearMemory();
+
+        siteStatsService.recalculateStats();
+        log.info("Site statistics recalculated");
     }
 }
 
