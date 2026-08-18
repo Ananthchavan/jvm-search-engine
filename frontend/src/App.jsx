@@ -1,10 +1,8 @@
 import { useState } from 'react'
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <h1>LETS FUCKING GOOOO</h1>
+    <h1>Working</h1>
   )
 }
 
