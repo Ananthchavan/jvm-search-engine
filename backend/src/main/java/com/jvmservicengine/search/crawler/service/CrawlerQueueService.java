@@ -35,15 +35,20 @@ public class CrawlerQueueService {
 
     public void addUrlToQueue(String url, int depth, int priority) {
         if (isValidUrl(url) && seenUrls.add(url)) {
-            CrawlerQueueItem newItem = new CrawlerQueueItem();
-            newItem.setUrl(url);
-            newItem.setStatus(CrawlStatus.PENDING);
-            newItem.setCrawlDepth(depth);
-            newItem.setPriority(priority);
-            newItem.setLastCrawledAt(LocalDateTime.now());
+            try {
+                CrawlerQueueItem newItem = new CrawlerQueueItem();
+                newItem.setUrl(url);
+                newItem.setStatus(CrawlStatus.PENDING);
+                newItem.setCrawlDepth(depth);
+                newItem.setPriority(priority);
+                newItem.setLastCrawledAt(LocalDateTime.now());
 
-            crawlerQueueRepository.save(newItem);
-            log.debug("Added URL to frontier: {}", url);
+                crawlerQueueRepository.save(newItem);
+                log.debug("Added URL to frontier: {}", url);
+            } catch (Exception e) {
+                log.debug("URL already exists in database, skipping duplicate: {}", url);
+            }
+
         }
     }
 

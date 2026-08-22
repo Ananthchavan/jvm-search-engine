@@ -35,6 +35,7 @@ public class CrawlerService {
 
     private static final int MAX_CRAWL_DEPTH = 3;
 
+    @Async("crawlerTaskExecutor")
     public void addSeedAndStart(String seedUrl) {
         log.info("Initializing crawl with seed URL: {}", seedUrl);
         queueService.addUrlToQueue(seedUrl, 0, 100);
@@ -75,12 +76,17 @@ public class CrawlerService {
 
                     if (parsedData != null) {
                         Page page = new Page();
-                        page.setUrl(currentItem.getUrl());
-                        page.setTitle(parsedData.title());
-                        page.setContentHash(parsedData.bodyText());
-                        page.setCreatedAt(LocalDateTime.now());
-                        page.setCrawlDepth(currentItem.getCrawlDepth());
-                        pageRepository.save(page);
+                        try {
+                            page.setUrl(currentItem.getUrl());
+                            page.setTitle(parsedData.title());
+                            page.setContentHash(parsedData.bodyText());
+                            page.setCreatedAt(LocalDateTime.now());
+                            page.setCrawlDepth(currentItem.getCrawlDepth());
+                            pageRepository.save(page);
+                        } catch (Exception e) {
+                            log.warn("Page already exists or failed to save for URL: {}", page.getUrl());
+                        }
+
 
                         if (currentItem.getCrawlDepth() < MAX_CRAWL_DEPTH) {
                             for (String nextUrl : parsedData.outgoingLinks()) {
