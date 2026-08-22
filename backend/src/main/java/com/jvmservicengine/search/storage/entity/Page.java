@@ -25,10 +25,10 @@ public class Page {
     @Column(nullable = false, unique = true, length = 2048)
     private String url;
 
-    @Column(length=500)
+    @Column(columnDefinition = "TEXT")
     private String title;
 
-    @Column(name = "content_hash", length = 64)
+    @Column(name = "content_hash", columnDefinition = "TEXT")
     private String contentHash;
 
     @Column(name = "content_preview", columnDefinition = "TEXT")
