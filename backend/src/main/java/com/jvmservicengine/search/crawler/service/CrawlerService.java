@@ -79,6 +79,7 @@ public class CrawlerService {
                         page.setTitle(parsedData.title());
                         page.setContentHash(parsedData.bodyText());
                         page.setCreatedAt(LocalDateTime.now());
+                        page.setCrawlDepth(currentItem.getCrawlDepth());
                         pageRepository.save(page);
 
                         if (currentItem.getCrawlDepth() < MAX_CRAWL_DEPTH) {
