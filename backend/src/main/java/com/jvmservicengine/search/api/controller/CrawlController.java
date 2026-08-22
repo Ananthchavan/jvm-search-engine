@@ -5,14 +5,12 @@ import com.jvmservicengine.search.api.dto.request.CrawlRequest;
 import com.jvmservicengine.search.crawler.service.CrawlerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/crawl")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*")
 public class CrawlController {
 
     private final CrawlerService crawlerService;
