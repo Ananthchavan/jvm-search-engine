@@ -11,6 +11,7 @@ import com.jvmservicengine.search.storage.entity.Page;
 import com.jvmservicengine.search.storage.entity.Posting;
 import com.jvmservicengine.search.storage.entity.SiteStats;
 import com.jvmservicengine.search.storage.repository.PostingRepository;
+import com.jvmservicengine.search.storage.repository.PageRepository;
 import com.jvmservicengine.search.storage.repository.SiteStatsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class SearchService {
 
     private final TfIdfCalculator tfIdfCalculator;
     private final SiteStatsRepository siteStatsRepository;
+    private final PageRepository pageRepository;
 
     private final SearchHistoryService searchHistoryService;
 
@@ -109,6 +111,11 @@ public class SearchService {
         long totalPages = siteStatsRepository.findTopByOrderByIdDesc()
                 .map(SiteStats::getIndexedPages)
                 .orElse(0L);
+
+        // Fall back to actual page count if SiteStats has not been populated yet
+        if (totalPages == 0) {
+            totalPages = pageRepository.count();
+        }
 
         Map<Page, Double> pageScores = new HashMap<>();
 

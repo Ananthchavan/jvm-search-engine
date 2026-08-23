@@ -51,6 +51,11 @@ public class IndexingService {
 
             PostingList postingList = inMemoryIndex.search(word);
             if(postingList != null) {
+                int documentCount = postingList.getPostings().size();
+
+                // Update document frequency so IDF can be calculated correctly
+                termEntity.setDocumentFrequency(termEntity.getDocumentFrequency() + documentCount);
+                termRepository.save(termEntity);
 
                 for (IndexPosting memoryPosting : postingList.getPostings()) {
                     Posting dbPosting = new Posting();
