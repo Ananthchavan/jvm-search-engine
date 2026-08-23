@@ -34,21 +34,29 @@ public class CrawlerQueueService {
     }
 
     public void addUrlToQueue(String url, int depth, int priority) {
-        if (isValidUrl(url) && seenUrls.add(url)) {
-            try {
-                CrawlerQueueItem newItem = new CrawlerQueueItem();
-                newItem.setUrl(url);
-                newItem.setStatus(CrawlStatus.PENDING);
-                newItem.setCrawlDepth(depth);
-                newItem.setPriority(priority);
-                newItem.setLastCrawledAt(LocalDateTime.now());
+        if (!isValidUrl(url)) return;
 
-                crawlerQueueRepository.save(newItem);
-                log.debug("Added URL to frontier: {}", url);
-            } catch (Exception e) {
-                log.debug("URL already exists in database, skipping duplicate: {}", url);
-            }
+        // Fast in-memory check first
+        if (!seenUrls.add(url)) return;
 
+        // Hard DB guard — catches URLs saved in previous server runs or the current crawl
+        if (pageRepository.existsByUrl(url) || crawlerQueueRepository.existsByUrl(url)) {
+            log.debug("URL already known in DB, skipping: {}", url);
+            return;
+        }
+
+        try {
+            CrawlerQueueItem newItem = new CrawlerQueueItem();
+            newItem.setUrl(url);
+            newItem.setStatus(CrawlStatus.PENDING);
+            newItem.setCrawlDepth(depth);
+            newItem.setPriority(priority);
+            newItem.setLastCrawledAt(LocalDateTime.now());
+
+            crawlerQueueRepository.save(newItem);
+            log.debug("Added URL to frontier: {}", url);
+        } catch (Exception e) {
+            log.debug("URL already exists in database, skipping duplicate: {}", url);
         }
     }
 
@@ -62,7 +70,33 @@ public class CrawlerQueueService {
         crawlerQueueRepository.save(item);
     }
 
+    private static final Set<String> BLOCKED_DOMAINS = Set.of(
+            "oracle.com",
+            "docs.oracle.com",
+            "login.oracle.com",
+            "support.oracle.com",
+            "twitter.com",
+            "facebook.com",
+            "linkedin.com",
+            "youtube.com",
+            "instagram.com",
+            "t.co"
+    );
+
     private boolean isValidUrl(String url) {
-        return url != null && (url.startsWith("http://") || url.startsWith("https://"));
+        if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+            return false;
+        }
+        try {
+            String host = new java.net.URL(url).getHost().toLowerCase();
+            boolean blocked = BLOCKED_DOMAINS.stream().anyMatch(host::contains);
+            if (blocked) {
+                log.debug("Blocked domain, skipping: {}", url);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

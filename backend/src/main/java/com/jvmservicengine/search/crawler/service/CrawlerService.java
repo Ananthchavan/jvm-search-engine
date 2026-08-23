@@ -4,20 +4,23 @@ import com.jvmservicengine.search.api.dto.ParsedPageData;
 import com.jvmservicengine.search.common.enums.CrawlStatus;
 import com.jvmservicengine.search.crawler.jsoup.JsoupWebClient;
 import com.jvmservicengine.search.crawler.robots.RobotsTxtService;
+import com.jvmservicengine.search.indexing.invertedindex.InMemoryInvertedIndex;
 import com.jvmservicengine.search.parser.service.HtmlParserService;
+import com.jvmservicengine.search.processing.service.TextProcessingService;
 import com.jvmservicengine.search.storage.entity.CrawlerQueueItem;
 import com.jvmservicengine.search.storage.entity.Page;
 import com.jvmservicengine.search.storage.repository.PageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.net.URL;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -32,8 +35,11 @@ public class CrawlerService {
     private final RobotsTxtService robotsTxtService;
     private final RateLimiterService rateLimiterService;
     private final HtmlParserService htmlParserService;
+    private final TextProcessingService textProcessingService;
+    private final InMemoryInvertedIndex inMemoryInvertedIndex;
 
     private static final int MAX_CRAWL_DEPTH = 3;
+    private static final int CONTENT_PREVIEW_MAX_LENGTH = 500;
 
     @Async("crawlerTaskExecutor")
     public void addSeedAndStart(String seedUrl) {
@@ -75,18 +81,43 @@ public class CrawlerService {
                     ParsedPageData parsedData = htmlParserService.parse(rawHtml, currentItem.getUrl());
 
                     if (parsedData != null) {
-                        Page page = new Page();
                         try {
-                            page.setUrl(currentItem.getUrl());
-                            page.setTitle(parsedData.title());
-                            page.setContentHash(parsedData.bodyText());
-                            page.setCreatedAt(LocalDateTime.now());
-                            page.setCrawlDepth(currentItem.getCrawlDepth());
-                            pageRepository.save(page);
-                        } catch (Exception e) {
-                            log.warn("Page already exists or failed to save for URL: {}", page.getUrl());
-                        }
+                            String bodyText = parsedData.bodyText();
+                            String preview = bodyText != null && bodyText.length() > CONTENT_PREVIEW_MAX_LENGTH
+                                    ? bodyText.substring(0, CONTENT_PREVIEW_MAX_LENGTH)
+                                    : bodyText;
 
+                            // --- UPSERT: update if URL already exists, insert if new ---
+                            Optional<Page> existingPage = pageRepository.findByUrl(currentItem.getUrl());
+
+                            Page page;
+                            boolean isNewPage = existingPage.isEmpty();
+
+                            if (isNewPage) {
+                                page = new Page();
+                                page.setUrl(currentItem.getUrl());
+                                page.setCrawlDepth(currentItem.getCrawlDepth());
+                                page.setCreatedAt(LocalDateTime.now());
+                            } else {
+                                page = existingPage.get();
+                                log.info("Page already exists, updating content for: {}", page.getUrl());
+                            }
+
+                            page.setTitle(parsedData.title());
+                            page.setContentHash(bodyText);
+                            page.setContentPreview(preview);
+                            pageRepository.save(page);
+
+                            // Only index new pages to avoid duplicate postings in the inverted index
+                            if (isNewPage && bodyText != null && !bodyText.isBlank()) {
+                                Map<String, Integer> termFrequencies = textProcessingService.process(bodyText);
+                                List<String> tokens = new java.util.ArrayList<>(termFrequencies.keySet());
+                                inMemoryInvertedIndex.addDocument(page.getId(), tokens);
+                                log.info("Indexed {} unique terms for page: {}", tokens.size(), page.getUrl());
+                            }
+                        } catch (Exception e) {
+                            log.warn("Failed to save/index URL: {} — {}", currentItem.getUrl(), e.getMessage());
+                        }
 
                         if (currentItem.getCrawlDepth() < MAX_CRAWL_DEPTH) {
                             for (String nextUrl : parsedData.outgoingLinks()) {

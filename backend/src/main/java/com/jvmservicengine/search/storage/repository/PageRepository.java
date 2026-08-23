@@ -14,6 +14,8 @@ public interface PageRepository extends JpaRepository<Page, Long> {
 
     boolean existsByUrl(String url);
 
+    Optional<Page> findByUrl(String url);
+
     @Query("SELECT p.url FROM Page p")
     List<String> findAllUrls();
 }
