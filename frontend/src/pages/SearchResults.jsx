@@ -4,6 +4,7 @@ import useSearch from '../hooks/useSearch';
 import SearchBox from '../components/SearchBox';
 import SearchInfo from '../components/SearchInfo';
 import SearchResultItem from '../components/SearchResultItem';
+import SearchResultSkeleton from '../components/SearchResultSkeleton';
 import Pagination from '../components/Pagination';
 import { Loader2, SearchX } from 'lucide-react';
 
@@ -51,9 +52,11 @@ const SearchResults = () => {
                     </div>
                 ) : isLoading ? (
                     /* case 2: loading state */
-                    <div className="flex items-center justify-center gap-2 text-blue-600 mt-8">
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                        <span className="font-medium">Searching the inverted index...</span>
+                    <div className="mt-8">
+                        {/* skeleton placeholders */}
+                        {[...Array(5)].map((_, index) => (
+                            <SearchResultSkeleton key={index} />
+                        ))}
                     </div>
                 ) : error ? (
                     /* case 3: error state */
