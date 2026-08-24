@@ -26,7 +26,7 @@ public class EngineScheduler {
         }
     }
 
-    @Scheduled(fixedDelay = 900000)
+    @Scheduled(fixedDelay = 600000) // 10 minutes
     public void scheduleIndexFlushing() {
         log.info("[SCHEDULER] Waking up for periodic index flush");
 
