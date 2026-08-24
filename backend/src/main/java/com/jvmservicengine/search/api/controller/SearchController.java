@@ -24,10 +24,8 @@ public class SearchController {
         }
 
         int validPage = Math.max(1, page);
-
         SearchResponse response = searchService.search(query, validPage);
 
         return ResponseEntity.ok(response);
     }
 }
-
