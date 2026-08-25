@@ -21,4 +21,9 @@ public interface CrawlerQueueRepository extends JpaRepository<CrawlerQueueItem, 
 
     @Query("SELECT q.url FROM CrawlerQueueItem q")
     List<String> findAllUrls();
+
+    long countByStatus(CrawlStatus status);
+    List<CrawlerQueueItem> findTop50ByStatusOrderByLastCrawledAtDesc(CrawlStatus status);
+
+
 }
