@@ -10,7 +10,7 @@ import com.jvmservicengine.search.storage.entity.Term;
 import com.jvmservicengine.search.storage.repository.PageRepository;
 import com.jvmservicengine.search.storage.repository.PostingRepository;
 import com.jvmservicengine.search.storage.repository.TermRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,10 +34,9 @@ public class IndexingService {
     private final PageRepository pageRepository;
     private final SiteStatsService siteStatsService;
 
-    // ensures that if the database crashes halfway, entire batch is rolled back
     @Transactional
     public void flushToDatabase() {
-        log.info("\"Starting batch flush of Inverted Index to PostgreSQL");
+        log.info("Starting batch flush of Inverted Index to PostgreSQL");
 
         List<Posting> dbPostingToSave = new ArrayList<>();
 
@@ -51,21 +52,35 @@ public class IndexingService {
 
             PostingList postingList = inMemoryIndex.search(word);
             if(postingList != null) {
-                int documentCount = postingList.getPostings().size();
+                List<Posting> existingPostings = postingRepository.findByTerm(termEntity);
+                Map<Long, Posting> existingPostingsMap = existingPostings.stream()
+                        .collect(Collectors.toMap(p -> p.getPage().getId(), p -> p));
 
-                // Update document frequency so IDF can be calculated correctly
-                termEntity.setDocumentFrequency(termEntity.getDocumentFrequency() + documentCount);
-                termRepository.save(termEntity);
+                int newlyDiscoveredPagesCount = 0;
 
                 for (IndexPosting memoryPosting : postingList.getPostings()) {
-                    Posting dbPosting = new Posting();
-                    dbPosting.setTerm(termEntity);
+                    Long pageId = memoryPosting.getDocumentId();
+                    Posting dbPosting = existingPostingsMap.get(pageId);
 
-                    dbPosting.setPage(pageRepository.getReferenceById(memoryPosting.getDocumentId()));
-                    dbPosting.setTermFrequency(memoryPosting.getFrequency());
-                    dbPosting.setPositions(memoryPosting.getPositions().toString());
+                    if (dbPosting != null) {
+                        dbPosting.setTermFrequency(memoryPosting.getFrequency());
+                        dbPosting.setPositions(memoryPosting.getPositions().toString());
+                        dbPostingToSave.add(dbPosting);
+                    } else {
+                        dbPosting = new Posting();
+                        dbPosting.setTerm(termEntity);
+                        dbPosting.setPage(pageRepository.getReferenceById(pageId));
+                        dbPosting.setTermFrequency(memoryPosting.getFrequency());
+                        dbPosting.setPositions(memoryPosting.getPositions().toString());
 
-                    dbPostingToSave.add(dbPosting);
+                        dbPostingToSave.add(dbPosting);
+                        newlyDiscoveredPagesCount++;
+                    }
+                }
+
+                if (newlyDiscoveredPagesCount > 0) {
+                    termEntity.setDocumentFrequency(termEntity.getDocumentFrequency() + newlyDiscoveredPagesCount);
+                    termRepository.save(termEntity);
                 }
             }
         }
@@ -79,4 +94,3 @@ public class IndexingService {
         log.info("Site statistics recalculated");
     }
 }
-

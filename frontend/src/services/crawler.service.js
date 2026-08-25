@@ -31,7 +31,10 @@ const crawlerService = {
     },
 
     flushIndex: async () => {
-        const response = await apiClient.post('http://localhost:8080/api/crawl/flush-index');
+        // we override the default 10s timeout with 60s to avoid premature failure.
+        const response = await apiClient.post('http://localhost:8080/api/crawl/flush-index', null, {
+            timeout: 60000
+        });
         return response;
     }
 };
