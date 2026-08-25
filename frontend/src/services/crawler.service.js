@@ -28,6 +28,11 @@ const crawlerService = {
     getCrawlerErrors: async () => {
         const response = await apiClient.get('http://localhost:8080/api/crawl/errors');
         return response;
+    },
+
+    flushIndex: async () => {
+        const response = await apiClient.post('http://localhost:8080/api/crawl/flush-index');
+        return response;
     }
 };
 

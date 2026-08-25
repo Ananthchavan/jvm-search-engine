@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Activity, Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Activity, Clock, CheckCircle, XCircle, RefreshCw, Play, Square, Database } from 'lucide-react';
 import crawlerService from '../services/crawler.service';
 
 const CrawlerAdmin = () => {
-    const [stats, setStats] = useState({
-        pending: 0,
-        processing: 0,
-        completed: 0,
-        failed: 0
-    });
+    const [stats, setStats] = useState({ pending: 0, processing: 0, completed: 0, failed: 0 });
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [seedUrl, setSeedUrl] = useState('');
+    const [actionStatus, setActionStatus] = useState({ message: '', isError: false });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const fetchStats = async () => {
         try {
@@ -30,7 +28,33 @@ const CrawlerAdmin = () => {
         return () => clearInterval(interval);
     }, []);
 
-    // stat card component
+    const handleStartCrawl = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setActionStatus({ message: '', isError: false });
+
+        try {
+            const response = await crawlerService.startCrawl(seedUrl);
+            setActionStatus({ message: 'Crawler successfully started!', isError: false });
+            setSeedUrl('');
+            fetchStats();
+        } catch (err) {
+            setActionStatus({ message: err.message || 'Failed to start crawler.', isError: true });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleFlushIndex = async () => {
+        setActionStatus({ message: 'Flushing index to database...', isError: false });
+        try {
+            await crawlerService.flushIndex();
+            setActionStatus({ message: 'Index successfully flushed to PostgreSQL.', isError: false });
+        } catch (err) {
+            setActionStatus({ message: 'Failed to flush index.', isError: true });
+        }
+    };
+
     const StatCard = ({ title, count, icon: Icon, colorClass, bgColorClass }) => (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center">
             <div className={`p-4 rounded-full ${bgColorClass} ${colorClass} mr-4`}>
@@ -38,9 +62,7 @@ const CrawlerAdmin = () => {
             </div>
             <div>
                 <p className="text-sm font-medium text-gray-500">{title}</p>
-                <h3 className="text-2xl font-bold text-gray-800">
-                    {count.toLocaleString()}
-                </h3>
+                <h3 className="text-2xl font-bold text-gray-800">{count.toLocaleString()}</h3>
             </div>
         </div>
     );
@@ -70,43 +92,70 @@ const CrawlerAdmin = () => {
 
             {/* grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <StatCard
-                    title="Pending URLs"
-                    count={stats.pending}
-                    icon={Clock}
-                    colorClass="text-yellow-600"
-                    bgColorClass="bg-yellow-100"
-                />
-                <StatCard
-                    title="Processing"
-                    count={stats.processing}
-                    icon={Activity}
-                    colorClass="text-blue-600"
-                    bgColorClass="bg-blue-100"
-                />
-                <StatCard
-                    title="Completed"
-                    count={stats.completed}
-                    icon={CheckCircle}
-                    colorClass="text-green-600"
-                    bgColorClass="bg-green-100"
-                />
-                <StatCard
-                    title="Failed"
-                    count={stats.failed}
-                    icon={XCircle}
-                    colorClass="text-red-600"
-                    bgColorClass="bg-red-100"
-                />
+                <StatCard title="Pending URLs" count={stats.pending} icon={Clock} colorClass="text-yellow-600" bgColorClass="bg-yellow-100" />
+                <StatCard title="Processing" count={stats.processing} icon={Activity} colorClass="text-blue-600" bgColorClass="bg-blue-100" />
+                <StatCard title="Completed" count={stats.completed} icon={CheckCircle} colorClass="text-green-600" bgColorClass="bg-green-100" />
+                <StatCard title="Failed" count={stats.failed} icon={XCircle} colorClass="text-red-600" bgColorClass="bg-red-100" />
             </div>
 
-            {/* Bottom Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
                 <div className="lg:col-span-1">
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-dashed p-6 h-64 flex items-center justify-center text-gray-400">
-                        Crawler Controls (Stage 3) will go here
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h2 className="text-lg font-bold text-gray-800 mb-4">Command Center</h2>
+
+                        <form onSubmit={handleStartCrawl} className="mb-6">
+                            <label htmlFor="seedUrl" className="block text-sm font-medium text-gray-700 mb-2">
+                                Add Seed URL
+                            </label>
+                            <input
+                                type="url"
+                                id="seedUrl"
+                                value={seedUrl}
+                                onChange={(e) => setSeedUrl(e.target.value)}
+                                placeholder="https://example.com"
+                                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 mb-3 outline-none"
+                                required
+                            />
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="w-full flex justify-center items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition disabled:opacity-50"
+                            >
+                                <Play size={18} />
+                                {isSubmitting ? 'Starting...' : 'Start Crawler'}
+                            </button>
+                        </form>
+
+                        <hr className="my-6 border-gray-100" />
+
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleFlushIndex}
+                                className="w-full flex justify-center items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-200 transition"
+                            >
+                                <Database size={18} />
+                                Force Index Flush
+                            </button>
+
+                            <button
+                                disabled
+                                className="w-full flex justify-center items-center gap-2 bg-red-50 text-red-400 px-4 py-2 border border-red-100 rounded-md cursor-not-allowed"
+                                title="Stop endpoint not yet implemented in backend"
+                            >
+                                <Square size={18} />
+                                Stop Crawler
+                            </button>
+                        </div>
+
+                        {actionStatus.message && (
+                            <div className={`mt-4 p-3 text-sm rounded-md ${actionStatus.isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                                {actionStatus.message}
+                            </div>
+                        )}
                     </div>
                 </div>
+
                 <div className="lg:col-span-2">
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-dashed p-6 h-64 flex items-center justify-center text-gray-400">
                         Error Logs Table (Stage 4) will go here
