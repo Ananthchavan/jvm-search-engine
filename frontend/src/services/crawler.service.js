@@ -18,6 +18,16 @@ const crawlerService = {
         });
 
         return response;
+    },
+
+    getQueueStats: async () => {
+        const response = await apiClient.get('http://localhost:8080/api/crawl/stats');
+        return response;
+    },
+
+    getCrawlerErrors: async () => {
+        const response = await apiClient.get('http://localhost:8080/api/crawl/errors');
+        return response;
     }
 };
 
