@@ -61,7 +61,7 @@ public class DatabaseSeeder {
 
                 // 3. Add a URL to the Crawler Queue
                 CrawlerQueueItem queueItem = new CrawlerQueueItem();
-                queueItem.setUrl("https://docs.oracle.com/en/java/");
+                queueItem.setUrl("https://www.java.com/en/");
                 queueItem.setStatus(CrawlStatus.PENDING);
                 queueItem.setPriority(10);
                 queueItem.setCrawlDepth(0);

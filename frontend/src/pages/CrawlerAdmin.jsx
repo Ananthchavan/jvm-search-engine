@@ -8,7 +8,7 @@ const CrawlerAdmin = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [seedUrl, setSeedUrl] = useState('');
+    const [seedUrl, setSeedUrl] = useState('https://www.java.com/en/');
     const [actionStatus, setActionStatus] = useState({ message: '', isError: false });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -117,7 +117,7 @@ const CrawlerAdmin = () => {
                                 id="seedUrl"
                                 value={seedUrl}
                                 onChange={(e) => setSeedUrl(e.target.value)}
-                                placeholder="https://example.com"
+                                placeholder="https://www.java.com/en/"
                                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 mb-3 outline-none"
                                 required
                             />
