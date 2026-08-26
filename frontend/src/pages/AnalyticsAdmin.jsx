@@ -17,24 +17,44 @@ const AnalyticsDashboard = () => {
 
     const fetchAllData = async () => {
         setIsLoading(true);
-        try {
-            const [searchData, indexData, crawlerData, historyData] = await Promise.all([
-                analyticsService.getSearchMetrics(),
-                analyticsService.getStats(),
-                crawlerService.getQueueStats(),
-                analyticsService.getSearchHistory(0, 10)
-            ]);
+        const failures = [];
 
-            setSearchMetrics(searchData);
-            setIndexStats(indexData);
-            setCrawlerStats(crawlerData);
-            setRecentSearches(historyData.content || []);
-            setError(null);
-        } catch (err) {
-            setError(err.message || 'Failed to load dashboard metrics.');
-        } finally {
-            setIsLoading(false);
+        const [searchResult, indexResult, crawlerResult, historyResult] = await Promise.allSettled([
+            analyticsService.getSearchMetrics(),
+            analyticsService.getStats(),
+            crawlerService.getQueueStats(),
+            analyticsService.getSearchHistory(0, 10)
+        ]);
+
+        if (searchResult.status === 'fulfilled') {
+            setSearchMetrics(searchResult.value ?? { totalSearches: 0, averageLatency: 0, averageResults: 0 });
+        } else {
+            failures.push('Search Metrics');
         }
+
+        if (indexResult.status === 'fulfilled') {
+            setIndexStats(indexResult.value ?? { totalPages: 0, indexedPages: 0, totalTerms: 0, totalPostings: 0 });
+        } else {
+            failures.push('Index Stats');
+        }
+
+        if (crawlerResult.status === 'fulfilled') {
+            setCrawlerStats(crawlerResult.value ?? { pending: 0, processing: 0, completed: 0, failed: 0 });
+        } else {
+            failures.push('Crawler Stats');
+        }
+
+        if (historyResult.status === 'fulfilled') {
+            setRecentSearches(historyResult.value?.content ?? []);
+        } else {
+            failures.push('Search History');
+        }
+
+        setError(failures.length > 0
+            ? `Could not load: ${failures.join(', ')}. Make sure the backend server is running.`
+            : null
+        );
+        setIsLoading(false);
     };
 
     useEffect(() => {
