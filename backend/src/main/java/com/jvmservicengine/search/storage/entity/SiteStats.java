@@ -28,6 +28,9 @@ public class SiteStats {
     @Column(name = "total_terms", nullable = false)
     private Long totalTerms = 0L;
 
+    @Column(name = "total_postings", nullable = false)
+    private Long totalPostings = 0L;
+
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 

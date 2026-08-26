@@ -2,6 +2,7 @@ package com.jvmservicengine.search.analytics.statistics;
 
 import com.jvmservicengine.search.storage.entity.SiteStats;
 import com.jvmservicengine.search.storage.repository.PageRepository;
+import com.jvmservicengine.search.storage.repository.PostingRepository;
 import com.jvmservicengine.search.storage.repository.SiteStatsRepository;
 import com.jvmservicengine.search.storage.repository.TermRepository;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,7 @@ public class SiteStatsService {
     private final SiteStatsRepository siteStatsRepository;
     private final PageRepository pageRepository;
     private final TermRepository termRepository;
+    private final PostingRepository postingRepository;
 
     @Transactional(readOnly = true)
     public SiteStats getLatestStats() {
@@ -35,6 +37,7 @@ public class SiteStatsService {
         stats.setTotalPages(pageRepository.count());
         stats.setIndexedPages(pageRepository.count());
         stats.setTotalTerms(termRepository.count());
+        stats.setTotalPostings(postingRepository.count());
         stats.setLastCrawl(LocalDateTime.now());
 
         siteStatsRepository.save(stats);
