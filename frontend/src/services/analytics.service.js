@@ -6,13 +6,15 @@ const analyticsService = {
         return response;
     },
 
-    getSearchHistory: async (page = 0, size = 50) => {
+    getSearchHistory: async (page = 0, size = 10) => {
         const response = await apiClient.get('/analytics/history', {
-            params: {
-                page: Math.max(0, page),
-                size: Math.max(1, size)
-            }
+            params: { page, size }
         });
+        return response;
+    },
+
+    getSearchMetrics: async () => {
+        const response = await apiClient.get('/analytics/history/metrics');
         return response;
     }
 };
