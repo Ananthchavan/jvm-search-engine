@@ -11,6 +11,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 public class SearchHistoryService {
@@ -36,5 +38,18 @@ public class SearchHistoryService {
         history.setUserAgent(userAgent);
 
         searchHistoryRepository.save(history);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getSearchMetrics() {
+        long totalSearches = searchHistoryRepository.count();
+        double avgLatency = searchHistoryRepository.getAverageLatency();
+        double avgResults = searchHistoryRepository.getAverageResultCount();
+
+        return Map.of(
+                "totalSearches", totalSearches,
+                "averageLatency", Math.round(avgLatency),
+                "averageResults", Math.round(avgResults)
+        );
     }
 }

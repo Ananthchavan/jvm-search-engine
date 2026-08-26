@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1/analytics/history")
 @RequiredArgsConstructor
@@ -22,5 +24,10 @@ public class SearchHistoryController {
             @RequestParam(defaultValue = "50") int size
     ) {
         return ResponseEntity.ok(searchHistoryService.getRecentSearches(page, size));
+    }
+
+    @GetMapping("/metrics")
+    public ResponseEntity<Map<String, Object>> getSearchMetrics() {
+        return ResponseEntity.ok(searchHistoryService.getSearchMetrics());
     }
 }
