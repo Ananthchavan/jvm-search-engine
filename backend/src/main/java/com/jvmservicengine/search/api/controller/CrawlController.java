@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/crawl")
+@RequestMapping("/api/v1/crawl")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class CrawlController {
