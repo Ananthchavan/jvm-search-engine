@@ -11,9 +11,7 @@ const crawlerService = {
             throw new Error('URL must start with http:// or https://');
         }
 
-        // using an absolute URL here because CrawlController is mapped 
-        // to /api/crawl instead of /api/v1/crawl (will fix this later)
-        const response = await apiClient.post('http://localhost:8080/api/crawl', {
+        const response = await apiClient.post('/crawl', {
             seedUrl: formattedUrl
         });
 
@@ -21,18 +19,18 @@ const crawlerService = {
     },
 
     getQueueStats: async () => {
-        const response = await apiClient.get('http://localhost:8080/api/crawl/stats');
+        const response = await apiClient.get('/crawl/stats');
         return response;
     },
 
     getCrawlerErrors: async () => {
-        const response = await apiClient.get('http://localhost:8080/api/crawl/errors');
+        const response = await apiClient.get('/crawl/errors');
         return response;
     },
 
     flushIndex: async () => {
-        // we override the default 10s timeout with 60s to avoid premature failure.
-        const response = await apiClient.post('http://localhost:8080/api/crawl/flush-index', null, {
+        // override the default 10s timeout with 60s to avoid premature failure
+        const response = await apiClient.post('/crawl/flush-index', null, {
             timeout: 60000
         });
         return response;
