@@ -1,4 +1,4 @@
-﻿# 🔍 JVM Search Engine
+# 🔍 JVM Search Engine
 
 A full-stack, from-scratch search engine built on the JVM. It crawls the web, parses and indexes pages using a custom inverted index with TF-IDF ranking, and exposes a clean REST API consumed by a modern React + Vite frontend.
 
@@ -56,7 +56,7 @@ JVM Search Engine is a self-hosted, full-stack search engine that demonstrates c
 │                                                    │          │
 │  ┌──────────┐  ┌──────────┐  ┌────────────────┐   │          │
 │  │Analytics │  │Scheduler │  │  Search Service│◄──┘          │
-│  │(History, │  │(Cron     │  │(Ranking,Snippet│              │
+│  │(History, │  │(fixedDelay│  │(Ranking,Snippet│              │
 │  │ Stats)   │  │ Jobs)    │  │  Query Parser) │              │
 │  └──────────┘  └──────────┘  └────────────────┘              │
 └────────────────────────────┬─────────────────────────────────┘
@@ -113,7 +113,7 @@ jvm-search-engine/
 │       │   │   ├── api/                # REST controllers + DTOs
 │       │   │   │   ├── controller/
 │       │   │   │   │   ├── SearchController.java      # GET /api/v1/search
-│       │   │   │   │   └── CrawlController.java       # POST /api/crawl
+│       │   │   │   │   └── CrawlController.java       # POST /api/v1/crawl
 │       │   │   │   └── dto/
 │       │   │   │       ├── request/
 │       │   │   │       └── response/
@@ -213,7 +213,7 @@ jvm-search-engine/
 - **Snippet Generation** — Context-aware snippet extraction from indexed documents
 - **Analytics** — Search history tracking and aggregate site statistics (`SiteStatsService`)
 - **Crawl Queue Monitoring** — Real-time counts of PENDING / PROCESSING / DONE / FAILED items + error listing (top 50)
-- **Scheduled Jobs** — `CrawlScheduler` and `ReindexScheduler` for background maintenance
+- **Scheduled Jobs** — `EngineScheduler` drives two `fixedDelay` jobs: `scheduleCrawling()` every **5 min** and `scheduleIndexFlushing()` every **10 min** (no cron expression — each run starts after the previous one finishes)
 - **REST API** — `SearchController`, `CrawlController`, `StatisticsController`; CORS open and documented with OpenAPI/Swagger
 - **Async Processing** — Configurable thread-pool via `AsyncConfig`
 - **HikariCP** — Production-grade connection pooling (max 10 connections, min 5 idle)
@@ -348,10 +348,10 @@ Environment variable overrides: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/crawl` | Start a crawl job — body: `{ "seedUrl": "https://..." }` |
-| `POST` | `/api/crawl/flush-index` | Manually flush in-memory index to PostgreSQL |
-| `GET`  | `/api/crawl/stats` | Queue stats: pending / processing / completed / failed counts |
-| `GET`  | `/api/crawl/errors` | Last 50 failed crawl queue items |
+| `POST` | `/api/v1/crawl` | Start a crawl job — body: `{ "seedUrl": "https://..." }` |
+| `POST` | `/api/v1/crawl/flush-index` | Manually flush in-memory index to PostgreSQL |
+| `GET`  | `/api/v1/crawl/stats` | Queue stats: pending / processing / completed / failed counts |
+| `GET`  | `/api/v1/crawl/errors` | Last 50 failed crawl queue items |
 
 ### Analytics
 
@@ -378,7 +378,7 @@ Environment variable overrides: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_
 - [ ] Elasticsearch as an optional index backend
 - [ ] Autocomplete and spell-check endpoints
 - [ ] Dark mode toggle in the frontend
-- [ ] Align `CrawlController` base path to `/api/v1/` convention
+- [x] Align `CrawlController` base path to `/api/v1/` convention
 
 ---
 
