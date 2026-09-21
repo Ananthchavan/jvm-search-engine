@@ -1,7 +1,7 @@
 package com.jvmservicengine.search.searches.service;
 
 import com.jvmservicengine.search.analytics.searchhistory.SearchHistoryService;
-import com.jvmservicengine.search.indexing.tfidf.TfIdfCalculator;
+import com.jvmservicengine.search.ranking.RankingService;
 import com.jvmservicengine.search.searches.dto.SearchResponse;
 import com.jvmservicengine.search.searches.dto.SearchResultItem;
 import com.jvmservicengine.search.searches.query.ParsedQuery;
@@ -9,13 +9,9 @@ import com.jvmservicengine.search.searches.query.QueryParser;
 import com.jvmservicengine.search.searches.snippet.SnippetGenerator;
 import com.jvmservicengine.search.storage.entity.Page;
 import com.jvmservicengine.search.storage.entity.Posting;
-import com.jvmservicengine.search.storage.entity.SiteStats;
 import com.jvmservicengine.search.storage.repository.PostingRepository;
-import com.jvmservicengine.search.storage.repository.PageRepository;
-import com.jvmservicengine.search.storage.repository.SiteStatsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -27,11 +23,7 @@ public class SearchService {
     private final QueryParser queryParser;
     private final SnippetGenerator snippetGenerator;
     private final PostingRepository postingRepository;
-
-    private final TfIdfCalculator tfIdfCalculator;
-    private final SiteStatsRepository siteStatsRepository;
-    private final PageRepository pageRepository;
-
+    private final RankingService rankingService;
     private final SearchHistoryService searchHistoryService;
 
     private static final int PAGE_SIZE = 10;
@@ -59,8 +51,8 @@ public class SearchService {
         // filter Pages (Handle Boolean NOT Exclusions)
         List<Page> validPages = filterPages(postingsByPage, query);
 
-        // rank Pages using Phase 7 TF-IDF (TODO IMPLEMENTED ✅)
-        Map<Page, Double> rankedPages = calculateTfIdfScores(validPages, postingsByPage);
+        // rank Pages — single source of truth for TF-IDF scoring
+        Map<Page, Double> rankedPages = rankingService.rankPages(validPages, postingsByPage);
 
         // sort by Score Descending
         List<Map.Entry<Page, Double>> sortedResults = rankedPages.entrySet().stream()
@@ -104,40 +96,6 @@ public class SearchService {
                 .executionTimeMs(executionTime)
                 .results(resultItems)
                 .build();
-    }
-
-    private Map<Page, Double> calculateTfIdfScores(List<Page> validPages, Map<Page, List<Posting>> postingsByPage) {
-        // Fetch total indexed pages to calculate Inverse Document Frequency (IDF)
-        long totalPages = siteStatsRepository.findTopByOrderByIdDesc()
-                .map(SiteStats::getIndexedPages)
-                .orElse(0L);
-
-        // Fall back to actual page count if SiteStats has not been populated yet
-        if (totalPages == 0) {
-            totalPages = pageRepository.count();
-        }
-
-        Map<Page, Double> pageScores = new HashMap<>();
-
-        if (totalPages == 0) {
-            return pageScores;
-        }
-
-        // calculate scores for every valid page
-        for (Page page : validPages) {
-            double totalScore = 0.0;
-            List<Posting> pagePostings = postingsByPage.get(page);
-
-            for (Posting posting : pagePostings) {
-                double tf = tfIdfCalculator.calculateTf(posting.getTermFrequency());
-                double idf = tfIdfCalculator.calculateIdf(totalPages, posting.getTerm().getDocumentFrequency());
-                totalScore += tfIdfCalculator.calculateScore(tf, idf);
-            }
-
-            pageScores.put(page, totalScore);
-        }
-
-        return pageScores;
     }
 
     private List<Page> filterPages(Map<Page, List<Posting>> postingsByPage, ParsedQuery query) {

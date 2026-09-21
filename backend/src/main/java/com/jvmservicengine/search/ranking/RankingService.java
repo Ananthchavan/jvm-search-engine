@@ -1,77 +1,74 @@
 package com.jvmservicengine.search.ranking;
 
 import com.jvmservicengine.search.indexing.tfidf.TfIdfCalculator;
-import com.jvmservicengine.search.processing.service.TextProcessingService;
 import com.jvmservicengine.search.storage.entity.Page;
 import com.jvmservicengine.search.storage.entity.Posting;
 import com.jvmservicengine.search.storage.entity.SiteStats;
-import com.jvmservicengine.search.storage.entity.Term;
-import com.jvmservicengine.search.storage.repository.PostingRepository;
+import com.jvmservicengine.search.storage.repository.PageRepository;
 import com.jvmservicengine.search.storage.repository.SiteStatsRepository;
-import com.jvmservicengine.search.storage.repository.TermRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class RankingService {
 
-    private final TextProcessingService textProcessingService;
-    private final SiteStatsRepository siteStatsRepository;
-    private final TermRepository termRepository;
-    private final PostingRepository postingRepository;
     private final TfIdfCalculator tfIdfCalculator;
+    private final SiteStatsRepository siteStatsRepository;
+    private final PageRepository pageRepository;
 
-    public List<RankedResult> search(String rawQuery) {
-
-        Map<String, Integer> queryTerms = textProcessingService.process(rawQuery);
-        if(queryTerms.isEmpty()) {
-            return Collections.emptyList();
-        }
+    /**
+     * Ranks the given pages by cumulative TF-IDF score using pre-fetched postings.
+     *
+     * <p>Total document count is resolved internally: first from the latest
+     * {@code SiteStats} snapshot, then falling back to a live
+     * {@code pageRepository.count()} if SiteStats has not yet been populated.
+     *
+     * @param validPages     pages that have already passed query filtering (NOT exclusions etc.)
+     * @param postingsByPage postings grouped by page, fetched by the caller
+     * @return mutable map of page → cumulative TF-IDF score (unsorted)
+     */
+    public Map<Page, Double> rankPages(List<Page> validPages,
+                                       Map<Page, List<Posting>> postingsByPage) {
 
         long totalPages = siteStatsRepository.findTopByOrderByIdDesc()
                 .map(SiteStats::getIndexedPages)
                 .orElse(0L);
 
-        if(totalPages == 0) {
-            log.warn("Search attempted but database is empty. No pages indexed");
-            return Collections.emptyList();
+        // Fall back to live count if SiteStats has not been populated yet
+        if (totalPages == 0) {
+            totalPages = pageRepository.count();
         }
 
         Map<Page, Double> pageScores = new HashMap<>();
 
-        for(String word : queryTerms.keySet()) {
-
-            Optional<Term> termOpt = termRepository.findByTerm(word);
-            if(termOpt.isEmpty()) {
-                continue;
-            }
-            Term term = termOpt.get();
-
-            double idf = tfIdfCalculator.calculateIdf(totalPages, term.getDocumentFrequency());
-
-            List<Posting> postings = postingRepository.findByTerm(term);
-
-            for(Posting posting : postings) {
-                double tf = tfIdfCalculator.calculateTf(posting.getTermFrequency());
-                double score = tfIdfCalculator.calculateScore(tf, idf);
-
-                Page page = posting.getPage();
-
-                pageScores.put(page, pageScores.getOrDefault(page, 0.0) + score);
-            }
+        if (totalPages == 0) {
+            log.warn("[RANKING] Ranking attempted but no pages are indexed yet");
+            return pageScores;
         }
 
-        return pageScores.entrySet().stream()
-                .sorted(Map.Entry.<Page, Double>comparingByValue().reversed())
-                .map(entry -> new RankedResult(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
+        for (Page page : validPages) {
+            double totalScore = 0.0;
+            List<Posting> pagePostings = postingsByPage.get(page);
+
+            for (Posting posting : pagePostings) {
+                double tf  = tfIdfCalculator.calculateTf(posting.getTermFrequency());
+                double idf = tfIdfCalculator.calculateIdf(totalPages, posting.getTerm().getDocumentFrequency());
+                totalScore += tfIdfCalculator.calculateScore(tf, idf);
+            }
+
+            pageScores.put(page, totalScore);
+        }
+
+        return pageScores;
     }
 
+    /** Value type for callers that need a fully sorted, ranked result list. */
     public record RankedResult(Page page, double score) {}
 }
