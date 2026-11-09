@@ -21,6 +21,26 @@ public class TextProcessingService {
     private final Stemmer stemmer;
     private final FrequencyCalculator frequencyCalculator;
 
+    /**
+     * Pipeline: normalize → tokenize (with stop-word removal) → stem.
+     */
+    public List<String> processToTokens(String rawText) {
+        if (rawText == null || rawText.isBlank()) {
+            log.warn("Received empty text for processing");
+            return List.of();
+        }
+
+        String cleanText = textNormalizer.normalize(rawText);
+        List<String> tokens = tokenizer.tokenize(cleanText);
+        List<String> stemmedTokens = stemmer.stem(tokens);
+
+        log.debug("Processed text into {} tokens ({} unique).",
+                stemmedTokens.size(),
+                stemmedTokens.stream().distinct().count());
+
+        return stemmedTokens;
+    }
+
     public Map<String, Integer> process(String rawText) {
         if (rawText == null || rawText.isBlank()) {
             log.warn("Received empty text for processing");

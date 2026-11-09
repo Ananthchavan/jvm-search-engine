@@ -18,9 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URL;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -110,10 +108,12 @@ public class CrawlerService {
 
                             // Only index new pages to avoid duplicate postings in the inverted index
                             if (isNewPage && bodyText != null && !bodyText.isBlank()) {
-                                Map<String, Integer> termFrequencies = textProcessingService.process(bodyText);
-                                List<String> tokens = new java.util.ArrayList<>(termFrequencies.keySet());
+                                List<String> tokens = textProcessingService.processToTokens(bodyText);
                                 inMemoryInvertedIndex.addDocument(page.getId(), tokens);
-                                log.info("Indexed {} unique terms for page: {}", tokens.size(), page.getUrl());
+                                log.info("Indexed {} tokens ({} unique) for page: {}",
+                                        tokens.size(),
+                                        tokens.stream().distinct().count(),
+                                        page.getUrl());
                             }
                         } catch (Exception e) {
                             log.warn("Failed to save/index URL: {} — {}", currentItem.getUrl(), e.getMessage());
