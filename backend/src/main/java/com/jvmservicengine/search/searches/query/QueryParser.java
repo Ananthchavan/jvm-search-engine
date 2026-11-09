@@ -1,18 +1,21 @@
 package com.jvmservicengine.search.searches.query;
 
+import com.jvmservicengine.search.processing.service.TextProcessingService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
+@RequiredArgsConstructor
 public class QueryParser {
 
     private static final Pattern PHRASE_PATTERN = Pattern.compile("\"([^\"]+)\"");
     private static final Pattern EXCLUSION_PATTERN = Pattern.compile("-(\\w+)");
+
+    private final TextProcessingService textProcessingService;
 
     public ParsedQuery parse(String rawQuery) {
         ParsedQuery parsedQuery = new ParsedQuery();
@@ -27,7 +30,7 @@ public class QueryParser {
         Matcher phraseMatcher = PHRASE_PATTERN.matcher(remainingQuery);
         while(phraseMatcher.find()) {
             String phrase = phraseMatcher.group(1);
-            List<String> processedPhrase = processText(phrase);
+            List<String> processedPhrase = textProcessingService.processToTokens(phrase);
             if(!processedPhrase.isEmpty()) {
                 parsedQuery.getExactPhrases().add(processedPhrase);
             }
@@ -39,7 +42,7 @@ public class QueryParser {
         Matcher exclusionMatcher = EXCLUSION_PATTERN.matcher(remainingQuery);
         while(exclusionMatcher.find()) {
             String excludedTerm = exclusionMatcher.group(1);
-            List<String> processedExclusion = processText(excludedTerm);
+            List<String> processedExclusion = textProcessingService.processToTokens(excludedTerm);
             if(!processedExclusion.isEmpty()) {
                 parsedQuery.getExcludedTerms().add(processedExclusion.get(0));
             }
@@ -47,25 +50,9 @@ public class QueryParser {
         }
 
         // Extraction of standard Terms(left over terms)
-        List<String> standardTerms = processText(remainingQuery);
+        List<String> standardTerms = textProcessingService.processToTokens(remainingQuery);
         parsedQuery.getStandardTerms().addAll(standardTerms);
 
         return parsedQuery;
-    }
-
-    private List<String> processText(String text) {
-        List<String> result = new ArrayList<>();
-        if(text == null || text.isBlank()) {
-            return result;
-        }
-
-        String words[] = text.toLowerCase().split("\\W+");
-        for(String word : words) {
-            if(!word.isBlank()) {
-                result.add(word);
-            }
-        }
-
-        return result;
     }
 }
