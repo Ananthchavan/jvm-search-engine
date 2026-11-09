@@ -11,14 +11,7 @@ import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Stemmer backed by Lucene's Porter stemmer algorithm.
- * Produces linguistically accurate stems:
- *   running/run  → run
- *   images/image → imag (standard Porter)
- *   string       → string  (not "str")
- *   spring       → spring  (not "spr")
- */
+
 @Component
 public class PorterEnglishStemmer implements Stemmer {
 

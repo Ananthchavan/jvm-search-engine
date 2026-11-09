@@ -3,10 +3,7 @@ package com.jvmservicengine.search.processing.stemming;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * @deprecated Replaced by {@link PorterEnglishStemmer} which uses Lucene's Porter stemmer.
- * Retained for reference only — not registered as a Spring bean.
- */
+
 @Deprecated
 public class SimpleEnglishStemmer implements Stemmer{
 

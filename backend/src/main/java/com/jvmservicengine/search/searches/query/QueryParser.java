@@ -13,7 +13,9 @@ import java.util.regex.Pattern;
 public class QueryParser {
 
     private static final Pattern PHRASE_PATTERN = Pattern.compile("\"([^\"]+)\"");
-    private static final Pattern EXCLUSION_PATTERN = Pattern.compile("-(\\w+)");
+    // Exclusion requires '-' at start-of-string or after whitespace, so hyphens
+    // inside words like "spring-boot" are NOT treated as exclusions.
+    private static final Pattern EXCLUSION_PATTERN = Pattern.compile("(?:^|(?<=\\s))-(\\w+)");
 
     private final TextProcessingService textProcessingService;
 
