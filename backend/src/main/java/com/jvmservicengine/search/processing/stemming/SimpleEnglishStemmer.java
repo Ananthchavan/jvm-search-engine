@@ -1,11 +1,13 @@
 package com.jvmservicengine.search.processing.stemming;
 
-import org.springframework.stereotype.Component;
-
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Component
+/**
+ * @deprecated Replaced by {@link PorterEnglishStemmer} which uses Lucene's Porter stemmer.
+ * Retained for reference only — not registered as a Spring bean.
+ */
+@Deprecated
 public class SimpleEnglishStemmer implements Stemmer{
 
 
