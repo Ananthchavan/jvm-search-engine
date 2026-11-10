@@ -23,7 +23,8 @@ import lombok.Setter;
 public class Posting {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "posting_seq")
+    @SequenceGenerator(name = "posting_seq", sequenceName = "posting_id_seq", allocationSize = 50)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
