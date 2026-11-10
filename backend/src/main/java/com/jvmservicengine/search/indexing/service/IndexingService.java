@@ -33,6 +33,9 @@ public class IndexingService {
 
     private static final Logger log = LoggerFactory.getLogger(IndexingService.class);
 
+    /** Must match the column definition on the terms table (length = 255). */
+    private static final int MAX_TERM_LENGTH = 255;
+
     private final InMemoryInvertedIndex inMemoryIndex;
     private final Dictionary dictionary;
     private final TermRepository termRepository;
@@ -73,8 +76,7 @@ public class IndexingService {
 
     /**
     Atomically drains the live in-memory index and dictionary into a snapshot,
-    then flushes that snapshot to PostgreSQL.  New postings arriving during
-    the flush go into fresh in-memory structures and are not affected.
+    then flushes that snapshot to PostgreSQL.
      */
     public boolean flushToDatabase() {
         if (!flushing.compareAndSet(false, true)) {
@@ -114,65 +116,93 @@ public class IndexingService {
     }
 
     /**
-    Persist a drained snapshot to PostgreSQL in a single transaction.
+     * Persist a drained snapshot to PostgreSQL.
+     * Each term's postings are saved in its own transaction so that one bad term
+     * (e.g. a word that still exceeds the DB column limit after tokenization)
+     * never fails the flush for all the others.
      */
-    @Transactional
     protected void persistSnapshot(DictionarySnapshot dictSnapshot,
                                    ConcurrentHashMap<Long, PostingList> indexSnapshot) {
 
-        List<Posting> dbPostingsToSave = new ArrayList<>();
+        int savedTerms = 0;
+        int skippedTerms = 0;
 
-        // Iterate only the terms present in the drained snapshot
         for (var entry : dictSnapshot.idToTermMap().entrySet()) {
             Long termId = entry.getKey();
             String word = entry.getValue();
+
+            // Safety net: tokens that slipped past the tokenizer cap (e.g. stemmed
+            // from a borderline-length input) must not blow up the whole flush.
+            if (word.length() > MAX_TERM_LENGTH) {
+                log.warn("Skipping term that exceeds DB column limit (length={}): {}…",
+                        word.length(), word.substring(0, Math.min(word.length(), 20)));
+                skippedTerms++;
+                continue;
+            }
 
             PostingList postingList = indexSnapshot.get(termId);
             if (postingList == null) {
                 continue; // term was in dictionary but had no postings
             }
 
-            Term termEntity = termRepository.findByTerm(word)
-                    .orElseGet(() -> {
-                        Term newTerm = new Term();
-                        newTerm.setTerm(word);
-                        return termRepository.save(newTerm);
-                    });
-
-            List<Posting> existingPostings = postingRepository.findByTerm(termEntity);
-            Map<Long, Posting> existingPostingsMap = existingPostings.stream()
-                    .collect(Collectors.toMap(p -> p.getPage().getId(), p -> p));
-
-            int newlyDiscoveredPagesCount = 0;
-
-            for (IndexPosting memoryPosting : postingList.getPostings()) {
-                Long pageId = memoryPosting.getDocumentId();
-                Posting dbPosting = existingPostingsMap.get(pageId);
-
-                if (dbPosting != null) {
-                    dbPosting.setTermFrequency(memoryPosting.getFrequency());
-                    dbPosting.setPositions(memoryPosting.getPositions().toString());
-                    dbPostingsToSave.add(dbPosting);
-                } else {
-                    dbPosting = new Posting();
-                    dbPosting.setTerm(termEntity);
-                    dbPosting.setPage(pageRepository.getReferenceById(pageId));
-                    dbPosting.setTermFrequency(memoryPosting.getFrequency());
-                    dbPosting.setPositions(memoryPosting.getPositions().toString());
-
-                    dbPostingsToSave.add(dbPosting);
-                    newlyDiscoveredPagesCount++;
-                }
+            try {
+                persistSingleTerm(word, postingList);
+                savedTerms++;
+            } catch (Exception ex) {
+                log.error("Failed to persist postings for term '{}' — skipping.", word, ex);
+                skippedTerms++;
             }
+        }
 
-            if (newlyDiscoveredPagesCount > 0) {
-                termEntity.setDocumentFrequency(
-                        termEntity.getDocumentFrequency() + newlyDiscoveredPagesCount);
-                termRepository.save(termEntity);
+        log.info("Flush complete: {} terms persisted, {} skipped.", savedTerms, skippedTerms);
+    }
+
+    /**
+     * Saves all postings for a single term in its own transaction.
+     * Isolation means a failure here rolls back only this term.
+     */
+    @Transactional
+    protected void persistSingleTerm(String word, PostingList postingList) {
+        Term termEntity = termRepository.findByTerm(word)
+                .orElseGet(() -> {
+                    Term newTerm = new Term();
+                    newTerm.setTerm(word);
+                    return termRepository.save(newTerm);
+                });
+
+        List<Posting> existingPostings = postingRepository.findByTerm(termEntity);
+        Map<Long, Posting> existingPostingsMap = existingPostings.stream()
+                .collect(Collectors.toMap(p -> p.getPage().getId(), p -> p));
+
+        List<Posting> dbPostingsToSave = new ArrayList<>();
+        int newlyDiscoveredPagesCount = 0;
+
+        for (IndexPosting memoryPosting : postingList.getPostings()) {
+            Long pageId = memoryPosting.getDocumentId();
+            Posting dbPosting = existingPostingsMap.get(pageId);
+
+            if (dbPosting != null) {
+                dbPosting.setTermFrequency(memoryPosting.getFrequency());
+                dbPosting.setPositions(memoryPosting.getPositions().toString());
+                dbPostingsToSave.add(dbPosting);
+            } else {
+                dbPosting = new Posting();
+                dbPosting.setTerm(termEntity);
+                dbPosting.setPage(pageRepository.getReferenceById(pageId));
+                dbPosting.setTermFrequency(memoryPosting.getFrequency());
+                dbPosting.setPositions(memoryPosting.getPositions().toString());
+
+                dbPostingsToSave.add(dbPosting);
+                newlyDiscoveredPagesCount++;
             }
         }
 
         postingRepository.saveAll(dbPostingsToSave);
-        log.info("Persisted {} postings to database.", dbPostingsToSave.size());
+
+        if (newlyDiscoveredPagesCount > 0) {
+            termEntity.setDocumentFrequency(
+                    termEntity.getDocumentFrequency() + newlyDiscoveredPagesCount);
+            termRepository.save(termEntity);
+        }
     }
 }
