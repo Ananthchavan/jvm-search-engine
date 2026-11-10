@@ -14,15 +14,13 @@ import com.jvmservicengine.search.storage.repository.PageRepository;
 import com.jvmservicengine.search.storage.repository.PostingRepository;
 import com.jvmservicengine.search.storage.repository.TermRepository;
 import jakarta.annotation.PostConstruct;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -36,6 +34,9 @@ public class IndexingService {
     /** Must match the column definition on the terms table (length = 255). */
     private static final int MAX_TERM_LENGTH = 255;
 
+    /** Number of terms processed per transaction chunk. */
+    private static final int CHUNK_SIZE = 1000;
+
     private final InMemoryInvertedIndex inMemoryIndex;
     private final Dictionary dictionary;
     private final TermRepository termRepository;
@@ -46,6 +47,8 @@ public class IndexingService {
 
     /** Guard against concurrent flushes (scheduler + manual POST can overlap). */
     private final AtomicBoolean flushing = new AtomicBoolean(false);
+
+    // Startup recovery
 
     @PostConstruct
     public void reindexOrphanedPages() {
@@ -74,10 +77,9 @@ public class IndexingService {
         log.info("[STARTUP] Finished re-indexing {} orphaned page(s).", orphanedPages.size());
     }
 
-    /**
-    Atomically drains the live in-memory index and dictionary into a snapshot,
-    then flushes that snapshot to PostgreSQL.
-     */
+    // Swap-and-drain flush
+
+
     public boolean flushToDatabase() {
         if (!flushing.compareAndSet(false, true)) {
             log.warn("Flush already in progress — skipping this invocation.");
@@ -115,94 +117,128 @@ public class IndexingService {
         return true;
     }
 
-    /**
-     * Persist a drained snapshot to PostgreSQL.
-     * Each term's postings are saved in its own transaction so that one bad term
-     * (e.g. a word that still exceeds the DB column limit after tokenization)
-     * never fails the flush for all the others.
-     */
+    // Bulk, chunked persistence
     protected void persistSnapshot(DictionarySnapshot dictSnapshot,
                                    ConcurrentHashMap<Long, PostingList> indexSnapshot) {
 
-        int savedTerms = 0;
-        int skippedTerms = 0;
+        // Collect valid (word → PostingList) pairs, skip oversized terms
+        List<Map.Entry<String, PostingList>> validEntries = new ArrayList<>();
 
         for (var entry : dictSnapshot.idToTermMap().entrySet()) {
-            Long termId = entry.getKey();
             String word = entry.getValue();
 
-            // Safety net: tokens that slipped past the tokenizer cap (e.g. stemmed
-            // from a borderline-length input) must not blow up the whole flush.
             if (word.length() > MAX_TERM_LENGTH) {
                 log.warn("Skipping term that exceeds DB column limit (length={}): {}…",
                         word.length(), word.substring(0, Math.min(word.length(), 20)));
-                skippedTerms++;
                 continue;
             }
 
-            PostingList postingList = indexSnapshot.get(termId);
+            PostingList postingList = indexSnapshot.get(entry.getKey());
             if (postingList == null) {
-                continue; // term was in dictionary but had no postings
+                continue; // term had no postings
             }
 
+            validEntries.add(Map.entry(word, postingList));
+        }
+
+        // Process in CHUNK_SIZE-term chunks
+        int savedTerms = 0;
+        int skippedTerms = 0;
+        int totalChunks = (int) Math.ceil((double) validEntries.size() / CHUNK_SIZE);
+        log.info("Persisting {} valid terms in {} chunk(s) of up to {}.",
+                validEntries.size(), totalChunks, CHUNK_SIZE);
+
+        for (int i = 0; i < validEntries.size(); i += CHUNK_SIZE) {
+            List<Map.Entry<String, PostingList>> chunk =
+                    validEntries.subList(i, Math.min(i + CHUNK_SIZE, validEntries.size()));
             try {
-                persistSingleTerm(word, postingList);
-                savedTerms++;
+                int saved = persistChunk(chunk);
+                savedTerms += saved;
             } catch (Exception ex) {
-                log.error("Failed to persist postings for term '{}' — skipping.", word, ex);
-                skippedTerms++;
+                log.error("Chunk {}/{} failed — skipping {} terms.",
+                        (i / CHUNK_SIZE) + 1, totalChunks, chunk.size(), ex);
+                skippedTerms += chunk.size();
             }
         }
 
         log.info("Flush complete: {} terms persisted, {} skipped.", savedTerms, skippedTerms);
     }
 
-    /**
-     * Saves all postings for a single term in its own transaction.
-     * Isolation means a failure here rolls back only this term.
-     */
     @Transactional
-    protected void persistSingleTerm(String word, PostingList postingList) {
-        Term termEntity = termRepository.findByTerm(word)
-                .orElseGet(() -> {
-                    Term newTerm = new Term();
-                    newTerm.setTerm(word);
-                    return termRepository.save(newTerm);
-                });
+    protected int persistChunk(List<Map.Entry<String, PostingList>> chunk) {
 
-        List<Posting> existingPostings = postingRepository.findByTerm(termEntity);
-        Map<Long, Posting> existingPostingsMap = existingPostings.stream()
-                .collect(Collectors.toMap(p -> p.getPage().getId(), p -> p));
+        List<String> words = chunk.stream()
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
 
-        List<Posting> dbPostingsToSave = new ArrayList<>();
-        int newlyDiscoveredPagesCount = 0;
+        Map<String, Term> existingTermsByWord = termRepository.findByTermIn(words).stream()
+                .collect(Collectors.toMap(Term::getTerm, t -> t));
 
-        for (IndexPosting memoryPosting : postingList.getPostings()) {
-            Long pageId = memoryPosting.getDocumentId();
-            Posting dbPosting = existingPostingsMap.get(pageId);
+        List<Term> newTerms = new ArrayList<>();
+        for (String word : words) {
+            if (!existingTermsByWord.containsKey(word)) {
+                Term t = new Term();
+                t.setTerm(word);
+                newTerms.add(t);
+            }
+        }
+        if (!newTerms.isEmpty()) {
+            termRepository.saveAll(newTerms);
+            newTerms.forEach(t -> existingTermsByWord.put(t.getTerm(), t));
+        }
 
-            if (dbPosting != null) {
-                dbPosting.setTermFrequency(memoryPosting.getFrequency());
-                dbPosting.setPositions(memoryPosting.getPositions().toString());
-                dbPostingsToSave.add(dbPosting);
-            } else {
-                dbPosting = new Posting();
-                dbPosting.setTerm(termEntity);
-                dbPosting.setPage(pageRepository.getReferenceById(pageId));
-                dbPosting.setTermFrequency(memoryPosting.getFrequency());
-                dbPosting.setPositions(memoryPosting.getPositions().toString());
+        Collection<Term> termEntities = existingTermsByWord.values();
+        Map<Long, Map<Long, Posting>> postingsByTermId = new HashMap<>();
+        for (Posting p : postingRepository.findByTermIn(termEntities)) {
+            postingsByTermId
+                    .computeIfAbsent(p.getTerm().getId(), k -> new HashMap<>())
+                    .put(p.getPage().getId(), p);
+        }
 
-                dbPostingsToSave.add(dbPosting);
-                newlyDiscoveredPagesCount++;
+        List<Posting> postingsToSave = new ArrayList<>();
+        Map<Term, Integer> docFreqIncrements = new HashMap<>();
+
+        for (Map.Entry<String, PostingList> entry : chunk) {
+            String word = entry.getKey();
+            PostingList postingList = entry.getValue();
+            Term termEntity = existingTermsByWord.get(word);
+
+            Map<Long, Posting> existingPostingsByPage =
+                    postingsByTermId.getOrDefault(termEntity.getId(), Collections.emptyMap());
+
+            int newPagesCount = 0;
+            for (IndexPosting memPosting : postingList.getPostings()) {
+                Long pageId = memPosting.getDocumentId();
+                Posting dbPosting = existingPostingsByPage.get(pageId);
+
+                if (dbPosting != null) {
+                    dbPosting.setTermFrequency(memPosting.getFrequency());
+                    dbPosting.setPositions(memPosting.getPositions().toString());
+                    postingsToSave.add(dbPosting);
+                } else {
+                    dbPosting = new Posting();
+                    dbPosting.setTerm(termEntity);
+                    dbPosting.setPage(pageRepository.getReferenceById(pageId));
+                    dbPosting.setTermFrequency(memPosting.getFrequency());
+                    dbPosting.setPositions(memPosting.getPositions().toString());
+                    postingsToSave.add(dbPosting);
+                    newPagesCount++;
+                }
+            }
+
+            if (newPagesCount > 0) {
+                docFreqIncrements.merge(termEntity, newPagesCount, Integer::sum);
             }
         }
 
-        postingRepository.saveAll(dbPostingsToSave);
+        postingRepository.saveAll(postingsToSave);
 
-        if (newlyDiscoveredPagesCount > 0) {
-            termEntity.setDocumentFrequency(
-                    termEntity.getDocumentFrequency() + newlyDiscoveredPagesCount);
-            termRepository.save(termEntity);
+        if (!docFreqIncrements.isEmpty()) {
+            docFreqIncrements.forEach((term, increment) ->
+                    term.setDocumentFrequency(term.getDocumentFrequency() + increment));
+            termRepository.saveAll(docFreqIncrements.keySet());
         }
+
+        return chunk.size();
     }
 }
