@@ -31,7 +31,10 @@ public class EngineScheduler {
         log.info("[SCHEDULER] Waking up for periodic index flush");
 
         try {
-            indexingService.flushToDatabase();
+            boolean ran = indexingService.flushToDatabase();
+            if (!ran) {
+                log.info("[SCHEDULER] Flush skipped — another flush is already in progress.");
+            }
         } catch (Exception e) {
             log.error("Scheduled indexing flush failed: {}", e.getMessage());
         }

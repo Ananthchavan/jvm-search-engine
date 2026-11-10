@@ -18,4 +18,11 @@ public interface PageRepository extends JpaRepository<Page, Long> {
 
     @Query("SELECT p.url FROM Page p")
     List<String> findAllUrls();
+
+    /**
+    Finds pages that have no postings in the database — i.e. pages that were
+    crawled and saved but whose in-memory index was never flushed before a restart.
+     */
+    @Query("SELECT p FROM Page p WHERE p.id NOT IN (SELECT DISTINCT po.page.id FROM Posting po)")
+    List<Page> findPagesWithNoPostings();
 }

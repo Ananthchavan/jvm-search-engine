@@ -33,7 +33,11 @@ public class CrawlController {
     /** Manual trigger — flushes the in-memory index to DB immediately */
     @PostMapping("/flush-index")
     public ResponseEntity<String> flushIndex() {
-        indexingService.flushToDatabase();
+        boolean started = indexingService.flushToDatabase();
+        if (!started) {
+            return ResponseEntity.status(409)
+                    .body("A flush is already in progress. Please try again later.");
+        }
         return ResponseEntity.ok("Index flushed to database successfully.");
     }
 
