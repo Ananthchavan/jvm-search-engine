@@ -16,4 +16,6 @@ public interface PostingRepository extends JpaRepository<Posting, Long> {
     List<Posting> findByTerm(Term term);
 
     List<Posting> findByTerm_TermIn(Collection<String> terms);
+
+    List<Posting> findByTermIn(Collection<Term> terms);
 }
