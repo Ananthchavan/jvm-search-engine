@@ -12,7 +12,7 @@ public class InMemoryInvertedIndex {
 
     private final Dictionary dictionary;
 
-    private final ConcurrentHashMap<Long, PostingList> index;
+    private volatile ConcurrentHashMap<Long, PostingList> index;
 
     public InMemoryInvertedIndex(Dictionary dictionary) {
         this.dictionary = dictionary;
@@ -45,6 +45,28 @@ public class InMemoryInvertedIndex {
 
     public int getuniqueTermCount() {
         return index.size();
+    }
+
+    /**
+    Atomically swaps the live index with a fresh empty one and returns the
+    old (drained) index map
+     */
+    public synchronized ConcurrentHashMap<Long, PostingList> swapAndDrain() {
+        ConcurrentHashMap<Long, PostingList> oldIndex = this.index;
+        this.index = new ConcurrentHashMap<>();
+        return oldIndex;
+    }
+
+    /**
+    Merges a previously drained index snapshot back into the live index.
+     */
+    public synchronized void mergeFrom(ConcurrentHashMap<Long, PostingList> snapshot) {
+        for (var entry : snapshot.entrySet()) {
+            PostingList existing = this.index.get(entry.getKey());
+            if (existing == null) {
+                this.index.put(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     public void clearMemory() {

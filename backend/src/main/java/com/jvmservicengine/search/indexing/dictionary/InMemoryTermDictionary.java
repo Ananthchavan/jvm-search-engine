@@ -6,11 +6,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
-public class InMemoryTermDictionary implements Dictionary{
+public class InMemoryTermDictionary implements Dictionary {
 
     // ensures thread-safe reads and writes
-    private final ConcurrentHashMap<String, Long> termToIdMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Long, String> idToTermMap = new ConcurrentHashMap<>();
+    private volatile ConcurrentHashMap<String, Long> termToIdMap = new ConcurrentHashMap<>();
+    private volatile ConcurrentHashMap<Long, String> idToTermMap = new ConcurrentHashMap<>();
 
     // ensures thread-safe ID generation
     private final AtomicLong idSequence = new AtomicLong();
@@ -43,5 +43,26 @@ public class InMemoryTermDictionary implements Dictionary{
     @Override
     public Iterable<Long> getAllTermIds() {
         return idToTermMap.keySet();
+    }
+
+    @Override
+    public synchronized DictionarySnapshot swapAndDrain() {
+        ConcurrentHashMap<String, Long> oldTermToId = this.termToIdMap;
+        ConcurrentHashMap<Long, String> oldIdToTerm = this.idToTermMap;
+
+        this.termToIdMap = new ConcurrentHashMap<>();
+        this.idToTermMap = new ConcurrentHashMap<>();
+
+        return new DictionarySnapshot(oldTermToId, oldIdToTerm);
+    }
+
+    @Override
+    public synchronized void mergeFrom(DictionarySnapshot snapshot) {
+        for (var entry : snapshot.termToIdMap().entrySet()) {
+            termToIdMap.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        for (var entry : snapshot.idToTermMap().entrySet()) {
+            idToTermMap.putIfAbsent(entry.getKey(), entry.getValue());
+        }
     }
 }
