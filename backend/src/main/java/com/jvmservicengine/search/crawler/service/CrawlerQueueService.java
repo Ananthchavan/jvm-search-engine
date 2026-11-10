@@ -9,6 +9,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -27,6 +28,14 @@ public class CrawlerQueueService {
 
     @PostConstruct
     public void initSeenUrls() {
+        // Reset items stuck in PROCESSING from a previous JVM run
+        int reset = crawlerQueueRepository.resetStuckProcessingItems(
+                CrawlStatus.PENDING, CrawlStatus.PROCESSING);
+        if (reset > 0) {
+            log.info("[STARTUP] Reset {} stuck PROCESSING item(s) back to PENDING.", reset);
+        }
+
+        // Warm up the in-memory deduplication cache
         log.info("Warming up URL deduplication cache from PostgreSQL...");
         seenUrls.addAll(pageRepository.findAllUrls());
         seenUrls.addAll(crawlerQueueRepository.findAllUrls());
@@ -36,10 +45,8 @@ public class CrawlerQueueService {
     public void addUrlToQueue(String url, int depth, int priority) {
         if (!isValidUrl(url)) return;
 
-        // Fast in-memory check first
         if (!seenUrls.add(url)) return;
 
-        // Hard DB guard — catches URLs saved in previous server runs or the current crawl
         if (pageRepository.existsByUrl(url) || crawlerQueueRepository.existsByUrl(url)) {
             log.debug("URL already known in DB, skipping: {}", url);
             return;
@@ -56,12 +63,17 @@ public class CrawlerQueueService {
             crawlerQueueRepository.save(newItem);
             log.debug("Added URL to frontier: {}", url);
         } catch (Exception e) {
-            log.debug("URL already exists in database, skipping duplicate: {}", url);
+            seenUrls.remove(url);
+            log.warn("Failed to persist URL to queue, removed from seen set: {} — {}", url, e.getMessage());
         }
     }
 
+    /**
+    Atomically claims the next PENDING item by marking it PROCESSING in one
+     */
+    @Transactional
     public Optional<CrawlerQueueItem> getNextItem() {
-        return crawlerQueueRepository.findFirstByStatusOrderByPriorityDesc(CrawlStatus.PENDING);
+        return crawlerQueueRepository.claimNextPending();
     }
 
     public void updateStatus(CrawlerQueueItem item, CrawlStatus status) {

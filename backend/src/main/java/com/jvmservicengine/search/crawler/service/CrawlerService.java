@@ -59,7 +59,7 @@ public class CrawlerService {
             }
 
             CrawlerQueueItem currentItem = nextItemOpt.get();
-            queueService.updateStatus(currentItem, CrawlStatus.PROCESSING);
+            // Status is already PROCESSING — set atomically by getNextItem() claim query
 
             try {
                 if (!robotsTxtService.isAllowed(currentItem.getUrl())) {
