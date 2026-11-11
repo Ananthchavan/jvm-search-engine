@@ -6,23 +6,35 @@ import com.jvmservicengine.search.storage.entity.CrawlerQueueItem;
 import com.jvmservicengine.search.storage.repository.CrawlerQueueRepository;
 import com.jvmservicengine.search.storage.repository.PageRepository;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class CrawlerQueueService {
 
     private final CrawlerQueueRepository crawlerQueueRepository;
     private final PageRepository pageRepository;
+
+    /** Comma-separated list of root domains to block, injected from application.properties. */
+    private final List<String> blockedDomains;
+
+    public CrawlerQueueService(CrawlerQueueRepository crawlerQueueRepository,
+                               PageRepository pageRepository,
+                               @Value("${crawler.blocked-domains:oracle.com,twitter.com,facebook.com,linkedin.com,youtube.com,instagram.com,t.co}")
+                               List<String> blockedDomains) {
+        this.crawlerQueueRepository = crawlerQueueRepository;
+        this.pageRepository = pageRepository;
+        this.blockedDomains = blockedDomains;
+    }
 
     private final Set<String> seenUrls = ConcurrentHashMap.newKeySet();
 
@@ -82,29 +94,20 @@ public class CrawlerQueueService {
         crawlerQueueRepository.save(item);
     }
 
-    private static final Set<String> BLOCKED_DOMAINS = Set.of(
-            "oracle.com",
-            "docs.oracle.com",
-            "login.oracle.com",
-            "support.oracle.com",
-            "twitter.com",
-            "facebook.com",
-            "linkedin.com",
-            "youtube.com",
-            "instagram.com",
-            "t.co"
-    );
-
     private boolean isValidUrl(String url) {
         if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) {
             return false;
         }
         try {
             String host = new java.net.URL(url).getHost().toLowerCase();
-            boolean blocked = BLOCKED_DOMAINS.stream().anyMatch(host::contains);
-            if (blocked) {
-                log.debug("Blocked domain, skipping: {}", url);
-                return false;
+            for (String blocked : blockedDomains) {
+                // Match on domain boundaries only:
+                //   host equals the blocked domain exactly, or
+                //   host is a subdomain of it (ends with ".<blocked>")
+                if (host.equals(blocked) || host.endsWith("." + blocked)) {
+                    log.debug("Blocked domain, skipping: {}", url);
+                    return false;
+                }
             }
             return true;
         } catch (Exception e) {
