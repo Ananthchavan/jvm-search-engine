@@ -12,7 +12,7 @@ import java.util.Optional;
 @Slf4j
 public class JsoupWebClient {
 
-    private static final String USER_AGENT = "JVMSearchEngineBot/1.0 (+http://localhost:8080)";
+    public static final String USER_AGENT = "JVMSearchEngineBot/1.0 (+http://localhost:8080)";
     private static final int TIMEOUT_MS = 5000;
 
     // Attempts to fetch a webpage and parse it into a JSoup Document
