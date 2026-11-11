@@ -76,7 +76,7 @@ public class SearchService {
                 String snippet = snippetGenerator.generateSnippet(page.getContentPreview(), query);
 
                 resultItems.add(SearchResultItem.builder()
-                        .title(page.getTitle())
+                        .title(snippetGenerator.escapeTitle(page.getTitle()))
                         .url(page.getUrl())
                         .snippet(snippet)
                         .relevanceScore(score)

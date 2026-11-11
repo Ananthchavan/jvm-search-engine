@@ -1,4 +1,10 @@
+import DOMPurify from "dompurify";
+
+const PURIFY_CONFIG = { ALLOWED_TAGS: ["b"], ALLOWED_ATTR: [] };
+
 const SearchResultItem = ({ result }) => {
+    const safeSnippet = DOMPurify.sanitize(result.snippet ?? "", PURIFY_CONFIG);
+
     return (
         <div className="mb-8 max-w-2xl">
             {/* URL */}
@@ -6,7 +12,7 @@ const SearchResultItem = ({ result }) => {
                 <span className="truncate">{result.url}</span>
             </div>
 
-            {/* clickable title */}
+            {/* clickable title — rendered as plain text by React, already escaped server-side */}
             <a
                 href={result.url}
                 target="_blank"
@@ -16,10 +22,10 @@ const SearchResultItem = ({ result }) => {
                 {result.title}
             </a>
 
-            {/* dynamic highlighted snippet */}
+            {/* dynamic highlighted snippet — sanitized to only <b> tags */}
             <p
                 className="text-sm text-gray-800 mt-1 leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: result.snippet }}
+                dangerouslySetInnerHTML={{ __html: safeSnippet }}
             />
 
             {/* tf-idf relevance score */}
