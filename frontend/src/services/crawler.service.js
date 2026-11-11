@@ -1,4 +1,4 @@
-import apiClient from './api';
+import { adminApiClient } from './api';
 
 const crawlerService = {
     startCrawl: async (url) => {
@@ -11,7 +11,7 @@ const crawlerService = {
             throw new Error('URL must start with http:// or https://');
         }
 
-        const response = await apiClient.post('/crawl', {
+        const response = await adminApiClient.post('/crawl', {
             seedUrl: formattedUrl
         });
 
@@ -19,18 +19,18 @@ const crawlerService = {
     },
 
     getQueueStats: async () => {
-        const response = await apiClient.get('/crawl/stats');
+        const response = await adminApiClient.get('/crawl/stats');
         return response;
     },
 
     getCrawlerErrors: async () => {
-        const response = await apiClient.get('/crawl/errors');
+        const response = await adminApiClient.get('/crawl/errors');
         return response;
     },
 
     flushIndex: async () => {
         // override the default 10s timeout with 60s to avoid premature failure
-        const response = await apiClient.post('/crawl/flush-index', null, {
+        const response = await adminApiClient.post('/crawl/flush-index', null, {
             timeout: 60000
         });
         return response;

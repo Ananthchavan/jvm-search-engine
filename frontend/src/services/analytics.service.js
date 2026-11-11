@@ -1,20 +1,20 @@
-import apiClient from './api';
+import { adminApiClient } from './api';
 
 const analyticsService = {
     getStats: async () => {
-        const response = await apiClient.get('/analytics/stats');
+        const response = await adminApiClient.get('/analytics/stats');
         return response;
     },
 
     getSearchHistory: async (page = 0, size = 10) => {
-        const response = await apiClient.get('/analytics/history', {
+        const response = await adminApiClient.get('/analytics/history', {
             params: { page, size }
         });
         return response;
     },
 
     getSearchMetrics: async () => {
-        const response = await apiClient.get('/analytics/history/metrics');
+        const response = await adminApiClient.get('/analytics/history/metrics');
         return response;
     }
 };
