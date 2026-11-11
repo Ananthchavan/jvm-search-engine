@@ -1,7 +1,7 @@
 package com.jvmservicengine.search.api.controller;
 
-
 import com.jvmservicengine.search.api.dto.request.CrawlRequest;
+import com.jvmservicengine.search.api.dto.response.CrawlErrorDto;
 import com.jvmservicengine.search.common.enums.CrawlStatus;
 import com.jvmservicengine.search.crawler.service.CrawlerService;
 import com.jvmservicengine.search.indexing.service.IndexingService;
@@ -17,7 +17,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/crawl")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class CrawlController {
 
     private final CrawlerService crawlerService;
@@ -25,7 +24,7 @@ public class CrawlController {
     private final CrawlerQueueRepository crawlerQueueRepository;
 
     @PostMapping
-    public ResponseEntity<String> startCrawl(@RequestBody CrawlRequest request){
+    public ResponseEntity<String> startCrawl(@RequestBody CrawlRequest request) {
         crawlerService.addSeedAndStart(request.seedUrl());
         return ResponseEntity.accepted().body("Crawl successfully started for: " + request.seedUrl());
     }
@@ -44,16 +43,22 @@ public class CrawlController {
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Long>> getQueueStats() {
         return ResponseEntity.ok(Map.of(
-                "pending", crawlerQueueRepository.countByStatus(CrawlStatus.PENDING),
+                "pending",    crawlerQueueRepository.countByStatus(CrawlStatus.PENDING),
                 "processing", crawlerQueueRepository.countByStatus(CrawlStatus.PROCESSING),
-                "completed", crawlerQueueRepository.countByStatus(CrawlStatus.DONE),
-                "failed", crawlerQueueRepository.countByStatus(CrawlStatus.FAILED)
+                "completed",  crawlerQueueRepository.countByStatus(CrawlStatus.DONE),
+                "failed",     crawlerQueueRepository.countByStatus(CrawlStatus.FAILED)
         ));
     }
 
     @GetMapping("/errors")
-    public ResponseEntity<List<CrawlerQueueItem>> getCrawlerErrors() {
-        return ResponseEntity.ok(crawlerQueueRepository.findTop50ByStatusOrderByLastCrawledAtDesc(CrawlStatus.FAILED));
+    public ResponseEntity<List<CrawlErrorDto>> getCrawlerErrors() {
+        List<CrawlerQueueItem> items =
+                crawlerQueueRepository.findTop50ByStatusOrderByLastCrawledAtDesc(CrawlStatus.FAILED);
+        List<CrawlErrorDto> dtos = items.stream()
+                .map(i -> new CrawlErrorDto(
+                        i.getId(), i.getUrl(), i.getStatus(),
+                        i.getCrawlDepth(), i.getErrorMessage(), i.getLastCrawledAt()))
+                .toList();
+        return ResponseEntity.ok(dtos);
     }
-    
 }

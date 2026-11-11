@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/search")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class SearchController {
 
     private final SearchService searchService;

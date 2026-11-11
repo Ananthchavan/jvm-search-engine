@@ -1,5 +1,6 @@
 package com.jvmservicengine.search.analytics.searchhistory;
 
+import com.jvmservicengine.search.api.dto.response.SearchHistoryDto;
 import com.jvmservicengine.search.storage.entity.SearchHistory;
 import com.jvmservicengine.search.storage.repository.SearchHistoryRepository;
 import org.springframework.scheduling.annotation.Async;
@@ -28,10 +29,13 @@ public class SearchHistoryService {
     private static final long DEDUP_WINDOW_MS = 2000;
 
     @Transactional(readOnly = true)
-    public Page<SearchHistory> getRecentSearches(int page, int size) {
+    public Page<SearchHistoryDto> getRecentSearches(int page, int size) {
         int safeSize = Math.min(size, 100);
         PageRequest pageRequest = PageRequest.of(page, safeSize, Sort.by(Sort.Direction.DESC, "searchedAt"));
-        return searchHistoryRepository.findAll(pageRequest);
+        return searchHistoryRepository.findAll(pageRequest)
+                .map(h -> new SearchHistoryDto(
+                        h.getId(), h.getQuery(), h.getResultCount(),
+                        h.getLatencyMs(), h.getSearchedAt()));
     }
 
     @Async

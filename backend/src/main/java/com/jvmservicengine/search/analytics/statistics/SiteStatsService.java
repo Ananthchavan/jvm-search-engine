@@ -1,5 +1,6 @@
 package com.jvmservicengine.search.analytics.statistics;
 
+import com.jvmservicengine.search.api.dto.response.SiteStatsDto;
 import com.jvmservicengine.search.storage.entity.SiteStats;
 import com.jvmservicengine.search.storage.repository.PageRepository;
 import com.jvmservicengine.search.storage.repository.PostingRepository;
@@ -21,8 +22,11 @@ public class SiteStatsService {
     private final PostingRepository postingRepository;
 
     @Transactional(readOnly = true)
-    public SiteStats getLatestStats() {
-        return siteStatsRepository.findTopByOrderByIdDesc().orElseGet(SiteStats::new);
+    public SiteStatsDto getLatestStatsDto() {
+        SiteStats s = siteStatsRepository.findTopByOrderByIdDesc().orElseGet(SiteStats::new);
+        return new SiteStatsDto(
+                s.getTotalPages(), s.getIndexedPages(), s.getTotalTerms(),
+                s.getTotalPostings(), s.getStartedAt(), s.getLastCrawl(), s.getCompletedAt());
     }
 
     @Transactional

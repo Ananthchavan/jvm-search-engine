@@ -1,6 +1,6 @@
 package com.jvmservicengine.search.analytics.searchhistory;
 
-import com.jvmservicengine.search.storage.entity.SearchHistory;
+import com.jvmservicengine.search.api.dto.response.SearchHistoryDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -11,13 +11,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/analytics/history")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class SearchHistoryController {
 
     private final SearchHistoryService searchHistoryService;
 
     @GetMapping
-    public ResponseEntity<Page<SearchHistory>> getHitory(
+    public ResponseEntity<Page<SearchHistoryDto>> getHistory(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
