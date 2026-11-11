@@ -4,33 +4,42 @@ package com.jvmservicengine.search.crawler.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
 public class RateLimiterService {
 
-    private final Map<String, Long> lastAccessTime = new ConcurrentHashMap<>();
+    private static final long DEFAULT_DELAY_MS = 2000;
+    private static final long MAX_DELAY_MS = 30_000;
 
-    private static final long DELAY_MS = 2000;
+    private final ConcurrentHashMap<String, Long> nextAllowedAt = new ConcurrentHashMap<>();
 
-    public void enforcePoliteness(String domain) {
+    public boolean enforcePoliteness(String domain, long crawlDelayMs) {
+        long effectiveDelay = Math.min(Math.max(DEFAULT_DELAY_MS, crawlDelayMs), MAX_DELAY_MS);
+
         long now = System.currentTimeMillis();
-        long lastAccess = lastAccessTime.getOrDefault(domain, 0L);
-        long timeSinceLastAccess = now - lastAccess;
 
-        if(timeSinceLastAccess < DELAY_MS) {
-            long sleepTime = DELAY_MS - timeSinceLastAccess;
-            try{
-                log.debug("Rate limiting: Sleeping for {} ms for domain {}", sleepTime, domain);
-                Thread.sleep(sleepTime);
-            } catch(InterruptedException e){
+        // Atomically claim the next available slot — no other thread can grab
+        // the same instant because compute() is exclusive per key.
+        long sleepUntil = nextAllowedAt.compute(domain, (k, prev) -> {
+            long earliest = (prev == null) ? now : Math.max(now, prev);
+            return earliest + effectiveDelay;
+        });
+
+        long waitMs = sleepUntil - System.currentTimeMillis();
+        if (waitMs > 0) {
+            log.debug("Rate limiting: sleeping {} ms for domain {}", waitMs, domain);
+            try {
+                Thread.sleep(waitMs);
+            } catch (InterruptedException e) {
+                // Restore the interrupt flag and tell the caller to stop.
                 Thread.currentThread().interrupt();
-                log.error("Rate limiter interrupted", e);
+                log.warn("Rate limiter interrupted while waiting for domain {}", domain);
+                return false;
             }
         }
 
-        lastAccessTime.put(domain, System.currentTimeMillis());
+        return true;
     }
 }

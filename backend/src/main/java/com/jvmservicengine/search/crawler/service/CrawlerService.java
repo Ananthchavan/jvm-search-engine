@@ -69,7 +69,13 @@ public class CrawlerService {
                 }
 
                 String domain = new URL(currentItem.getUrl()).getHost();
-                rateLimiterService.enforcePoliteness(domain);
+                long crawlDelayMs = robotsTxtService.getCrawlDelayMs(currentItem.getUrl()).orElse(0L);
+                boolean mayProceed = rateLimiterService.enforcePoliteness(domain, crawlDelayMs);
+                if (!mayProceed) {
+                    log.warn("Crawler worker interrupted while rate-limiting, stopping loop.");
+                    queueService.updateStatus(currentItem, CrawlStatus.FAILED);
+                    break;
+                }
 
                 Optional<Document> docOpt = jsoupWebClient.fetchDocument(currentItem.getUrl());
 
