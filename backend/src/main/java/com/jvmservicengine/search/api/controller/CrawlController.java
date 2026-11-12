@@ -1,14 +1,16 @@
 package com.jvmservicengine.search.api.controller;
 
 import com.jvmservicengine.search.api.dto.request.CrawlRequest;
+import com.jvmservicengine.search.api.dto.response.CrawlAcceptedResponse;
 import com.jvmservicengine.search.api.dto.response.CrawlErrorDto;
 import com.jvmservicengine.search.common.enums.CrawlStatus;
 import com.jvmservicengine.search.crawler.service.CrawlerService;
-import com.jvmservicengine.search.crawler.validation.UrlSafetyValidator;
 import com.jvmservicengine.search.indexing.service.IndexingService;
 import com.jvmservicengine.search.storage.entity.CrawlerQueueItem;
 import com.jvmservicengine.search.storage.repository.CrawlerQueueRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,16 +25,12 @@ public class CrawlController {
     private final CrawlerService crawlerService;
     private final IndexingService indexingService;
     private final CrawlerQueueRepository crawlerQueueRepository;
-    private final UrlSafetyValidator urlSafetyValidator;
 
     @PostMapping
-    public ResponseEntity<String> startCrawl(@RequestBody CrawlRequest request) {
-        if (!urlSafetyValidator.isSafe(request.seedUrl())) {
-            return ResponseEntity.badRequest()
-                    .body("Seed URL failed safety validation. Only public http/https URLs are allowed.");
-        }
+    public ResponseEntity<CrawlAcceptedResponse> startCrawl(@Valid @RequestBody CrawlRequest request) {
         crawlerService.addSeedAndStart(request.seedUrl());
-        return ResponseEntity.accepted().body("Crawl successfully started for: " + request.seedUrl());
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(new CrawlAcceptedResponse("accepted", request.seedUrl()));
     }
 
     /** Manual trigger — flushes the in-memory index to DB immediately */
