@@ -1,6 +1,7 @@
 package com.jvmservicengine.search.crawler.robots;
 
 import com.jvmservicengine.search.crawler.jsoup.JsoupWebClient;
+import com.jvmservicengine.search.crawler.validation.UrlSafetyValidator;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.jsoup.HttpStatusException;
@@ -24,6 +25,8 @@ public class RobotsTxtService {
 
     private static final String BOT_NAME = "jvmsearchenginebot";
     private static final int TIMEOUT_MS = 5000;
+    private static final int MAX_REDIRECTS = 5;
+    private static final int MAX_ROBOTS_BODY_BYTES = 512 * 1024; // 512 KB is plenty for robots.txt
 
     // Cache TTLs
     private static final long TTL_SUCCESS_MS = 24L * 60 * 60 * 1000; // 24 hours
@@ -31,6 +34,11 @@ public class RobotsTxtService {
     private static final long TTL_ERROR_MS = 15L * 60 * 1000;        // 15 minutes (temporary disallow all)
 
     private final ConcurrentHashMap<String, CachedRobots> cache = new ConcurrentHashMap<>();
+    private final UrlSafetyValidator urlSafetyValidator;
+
+    public RobotsTxtService(UrlSafetyValidator urlSafetyValidator) {
+        this.urlSafetyValidator = urlSafetyValidator;
+    }
 
     enum RuleType {
         ALLOW,
@@ -197,42 +205,76 @@ public class RobotsTxtService {
         String robotsUrl = originKey + "/robots.txt";
         long now = System.currentTimeMillis();
 
-        try {
-            log.debug("Fetching robots.txt from: {}", robotsUrl);
-            Connection.Response response = Jsoup.connect(robotsUrl)
-                    .userAgent(JsoupWebClient.USER_AGENT)
-                    .timeout(TIMEOUT_MS)
-                    .ignoreContentType(true)
-                    .followRedirects(true)
-                    .execute();
+        // Follow redirects manually, validating each hop with UrlSafetyValidator.
+        String currentUrl = robotsUrl;
+        for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
+            if (!urlSafetyValidator.isSafe(currentUrl)) {
+                log.warn("robots.txt fetch aborted – URL failed safety check at hop {}: {}", hop, currentUrl);
+                return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
+            }
+            try {
+                log.debug("Fetching robots.txt (hop {}): {}", hop, currentUrl);
+                Connection.Response response = Jsoup.connect(currentUrl)
+                        .userAgent(JsoupWebClient.USER_AGENT)
+                        .timeout(TIMEOUT_MS)
+                        .ignoreContentType(true)
+                        .followRedirects(false)             // manual redirect following
+                        .maxBodySize(MAX_ROBOTS_BODY_BYTES)
+                        .ignoreHttpErrors(true)
+                        .execute();
 
-            int statusCode = response.statusCode();
-            if (statusCode >= 200 && statusCode < 300) {
-                String body = response.body();
-                RobotsDirectives parsed = parseRobotsTxt(body);
-                log.info("Successfully fetched and parsed robots.txt for {}", originKey);
-                return new CachedRobots(parsed, now + TTL_SUCCESS_MS);
-            } else if (statusCode >= 400 && statusCode < 500) {
-                log.info("robots.txt returned 4xx status ({}) for {}. Allowing all.", statusCode, originKey);
-                return new CachedRobots(RobotsDirectives.allowAll(), now + TTL_4XX_MS);
-            } else {
-                // 5xx status codes
-                log.warn("robots.txt returned server error ({}) for {}. Temporarily disallowing all.", statusCode, originKey);
+                int statusCode = response.statusCode();
+
+                if (statusCode >= 300 && statusCode < 400) {
+                    String location = response.header("Location");
+                    if (location == null || location.isBlank()) {
+                        log.warn("robots.txt redirect at hop {} has no Location for: {}", hop, currentUrl);
+                        return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
+                    }
+                    currentUrl = resolveRelative(currentUrl, location);
+                    continue;
+                }
+
+                if (statusCode >= 200 && statusCode < 300) {
+                    String body = response.body();
+                    RobotsDirectives parsed = parseRobotsTxt(body);
+                    log.info("Successfully fetched and parsed robots.txt for {}", originKey);
+                    return new CachedRobots(parsed, now + TTL_SUCCESS_MS);
+                } else if (statusCode >= 400 && statusCode < 500) {
+                    log.info("robots.txt returned 4xx status ({}) for {}. Allowing all.", statusCode, originKey);
+                    return new CachedRobots(RobotsDirectives.allowAll(), now + TTL_4XX_MS);
+                } else {
+                    // 5xx
+                    log.warn("robots.txt returned server error ({}) for {}. Temporarily disallowing all.", statusCode, originKey);
+                    return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
+                }
+
+            } catch (HttpStatusException e) {
+                int code = e.getStatusCode();
+                if (code >= 400 && code < 500) {
+                    log.info("robots.txt returned HTTP {} for {}. Allowing all.", code, originKey);
+                    return new CachedRobots(RobotsDirectives.allowAll(), now + TTL_4XX_MS);
+                } else {
+                    log.warn("robots.txt returned HTTP {} for {}. Temporarily disallowing all.", code, originKey);
+                    return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
+                }
+            } catch (Exception e) {
+                log.warn("Network/timeout error fetching robots.txt for {}: {}. Temporarily disallowing all.",
+                        originKey, e.getMessage());
                 return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
             }
-        } catch (HttpStatusException e) {
-            int code = e.getStatusCode();
-            if (code >= 400 && code < 500) {
-                log.info("robots.txt returned HTTP {} for {}. Allowing all.", code, originKey);
-                return new CachedRobots(RobotsDirectives.allowAll(), now + TTL_4XX_MS);
-            } else {
-                log.warn("robots.txt returned HTTP {} for {}. Temporarily disallowing all.", code, originKey);
-                return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
-            }
+        }
+
+        log.warn("robots.txt exceeded max redirects for: {}", robotsUrl);
+        return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
+    }
+
+    private static String resolveRelative(String base, String location) {
+        try {
+            if (location.startsWith("http://") || location.startsWith("https://")) return location;
+            return new java.net.URL(new java.net.URL(base), location).toString();
         } catch (Exception e) {
-            log.warn("Network/timeout error fetching robots.txt for {}: {}. Temporarily disallowing all.",
-                    originKey, e.getMessage());
-            return new CachedRobots(RobotsDirectives.disallowAll(), now + TTL_ERROR_MS);
+            return location;
         }
     }
 
