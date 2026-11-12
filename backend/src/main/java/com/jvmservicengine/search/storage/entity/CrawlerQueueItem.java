@@ -39,6 +39,10 @@ public class CrawlerQueueItem {
     @Column(name = "crawl_depth", nullable = false)
     private Integer crawlDepth = 0;
 
+
+    @Column(name = "crawl_origin_host", length = 253)
+    private String crawlOriginHost;
+
     @UpdateTimestamp
     @Column(name = "last_crawled_at")
     private LocalDateTime lastCrawledAt;

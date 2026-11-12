@@ -4,6 +4,7 @@ import com.jvmservicengine.search.api.dto.request.CrawlRequest;
 import com.jvmservicengine.search.api.dto.response.CrawlErrorDto;
 import com.jvmservicengine.search.common.enums.CrawlStatus;
 import com.jvmservicengine.search.crawler.service.CrawlerService;
+import com.jvmservicengine.search.crawler.validation.UrlSafetyValidator;
 import com.jvmservicengine.search.indexing.service.IndexingService;
 import com.jvmservicengine.search.storage.entity.CrawlerQueueItem;
 import com.jvmservicengine.search.storage.repository.CrawlerQueueRepository;
@@ -22,9 +23,14 @@ public class CrawlController {
     private final CrawlerService crawlerService;
     private final IndexingService indexingService;
     private final CrawlerQueueRepository crawlerQueueRepository;
+    private final UrlSafetyValidator urlSafetyValidator;
 
     @PostMapping
     public ResponseEntity<String> startCrawl(@RequestBody CrawlRequest request) {
+        if (!urlSafetyValidator.isSafe(request.seedUrl())) {
+            return ResponseEntity.badRequest()
+                    .body("Seed URL failed safety validation. Only public http/https URLs are allowed.");
+        }
         crawlerService.addSeedAndStart(request.seedUrl());
         return ResponseEntity.accepted().body("Crawl successfully started for: " + request.seedUrl());
     }

@@ -4,6 +4,7 @@ import com.jvmservicengine.search.api.dto.ParsedPageData;
 import com.jvmservicengine.search.common.enums.CrawlStatus;
 import com.jvmservicengine.search.crawler.jsoup.JsoupWebClient;
 import com.jvmservicengine.search.crawler.robots.RobotsTxtService;
+import com.jvmservicengine.search.crawler.validation.UrlSafetyValidator;
 import com.jvmservicengine.search.indexing.invertedindex.InMemoryInvertedIndex;
 import com.jvmservicengine.search.parser.service.HtmlParserService;
 import com.jvmservicengine.search.processing.service.TextProcessingService;
@@ -35,6 +36,7 @@ public class CrawlerService {
     private final HtmlParserService htmlParserService;
     private final TextProcessingService textProcessingService;
     private final InMemoryInvertedIndex inMemoryInvertedIndex;
+    private final UrlSafetyValidator urlSafetyValidator;
 
     private static final int MAX_CRAWL_DEPTH = 3;
     private static final int CONTENT_PREVIEW_MAX_LENGTH = 500;
@@ -42,7 +44,22 @@ public class CrawlerService {
     @Async("crawlerTaskExecutor")
     public void addSeedAndStart(String seedUrl) {
         log.info("Initializing crawl with seed URL: {}", seedUrl);
-        queueService.addUrlToQueue(seedUrl, 0, 100);
+
+        // Validate the seed URL with the safety validator before queueing
+        if (!urlSafetyValidator.isSafe(seedUrl)) {
+            log.error("Seed URL failed safety check, aborting crawl: {}", seedUrl);
+            return;
+        }
+
+        String originHost;
+        try {
+            originHost = new URL(seedUrl).getHost().toLowerCase();
+        } catch (Exception e) {
+            log.error("Cannot parse seed URL host, aborting: {}", seedUrl);
+            return;
+        }
+
+        queueService.addUrlToQueue(seedUrl, 0, 100, originHost);
         processQueue();
     }
 
@@ -126,8 +143,10 @@ public class CrawlerService {
                         }
 
                         if (currentItem.getCrawlDepth() < MAX_CRAWL_DEPTH) {
+                            String originHost = currentItem.getCrawlOriginHost();
                             for (String nextUrl : parsedData.outgoingLinks()) {
-                                queueService.addUrlToQueue(nextUrl, currentItem.getCrawlDepth() + 1, 50);
+                                queueService.addUrlToQueue(
+                                        nextUrl, currentItem.getCrawlDepth() + 1, 50, originHost);
                             }
                         }
 
@@ -145,5 +164,5 @@ public class CrawlerService {
             }
         }
     }
-    
+
 }
