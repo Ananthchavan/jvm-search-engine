@@ -28,7 +28,7 @@ public class SearchService {
 
     private static final int PAGE_SIZE = 10;
 
-    public SearchResponse search(String rawQuery, int pageNumber) {
+    public SearchResponse search(String rawQuery, int pageNumber, String remoteAddr, String userAgent) {
         long startTime = System.currentTimeMillis();
 
         // parse the Query
@@ -86,7 +86,9 @@ public class SearchService {
 
         long executionTime = System.currentTimeMillis() - startTime;
 
-        searchHistoryService.logSearch(rawQuery, totalResults, executionTime, "127.0.0.1", "React Frontend");
+        String ip = (remoteAddr != null && !remoteAddr.isBlank()) ? remoteAddr : "127.0.0.1";
+        String ua = (userAgent != null && !userAgent.isBlank()) ? userAgent : "Unknown";
+        searchHistoryService.logSearch(rawQuery, totalResults, executionTime, ip, ua);
 
         return SearchResponse.builder()
                 .originalQuery(rawQuery)
