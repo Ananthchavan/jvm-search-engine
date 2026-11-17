@@ -129,11 +129,17 @@ public class CrawlerQueueService {
     }
 
     /**
-     * Atomically claims the next PENDING item by marking it PROCESSING in one query.
+     * Atomically claims the next PENDING item by locking it and marking it PROCESSING.
      */
     @Transactional
     public Optional<CrawlerQueueItem> getNextItem() {
-        return crawlerQueueRepository.claimNextPending();
+        Optional<CrawlerQueueItem> itemOpt = crawlerQueueRepository.findNextPendingForUpdate();
+        itemOpt.ifPresent(item -> {
+            item.setStatus(CrawlStatus.PROCESSING);
+            item.setLastCrawledAt(LocalDateTime.now());
+            crawlerQueueRepository.save(item);
+        });
+        return itemOpt;
     }
 
     public void updateStatus(CrawlerQueueItem item, CrawlStatus status) {

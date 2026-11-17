@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,27 +19,21 @@ public interface CrawlerQueueRepository extends JpaRepository<CrawlerQueueItem, 
     boolean existsByUrl(String url);
 
     /**
-    Atomically claims the highest-priority PENDING item and marks it PROCESSING
+     * Atomically selects the highest-priority PENDING item locking it with FOR UPDATE SKIP LOCKED
      */
-    @Modifying
     @Query(value = """
-            UPDATE crawler_queue
-               SET status = 'PROCESSING',
-                   last_crawled_at = NOW()
-             WHERE id = (
-                     SELECT id
-                       FROM crawler_queue
-                      WHERE status = 'PENDING'
-                      ORDER BY priority DESC, crawl_depth ASC, id ASC
-                      LIMIT 1
-                        FOR UPDATE SKIP LOCKED
-                   )
-            RETURNING *
+            SELECT *
+              FROM crawler_queue
+             WHERE status = 'PENDING'
+             ORDER BY priority DESC, crawl_depth ASC, id ASC
+             LIMIT 1
+               FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    Optional<CrawlerQueueItem> claimNextPending();
+    Optional<CrawlerQueueItem> findNextPendingForUpdate();
 
     
     @Modifying
+    @Transactional
     @Query("UPDATE CrawlerQueueItem q SET q.status = :pending WHERE q.status = :processing")
     int resetStuckProcessingItems(@Param("pending") CrawlStatus pending,
                                    @Param("processing") CrawlStatus processing);
