@@ -53,16 +53,21 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        boolean isDev = Arrays.asList(environment.getActiveProfiles()).contains("dev");
+        boolean authRequired = !isDev || (adminApiKey != null && !adminApiKey.isBlank());
+
         http
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .authorizeHttpRequests(auth -> auth
-                // Public: search only
-                .requestMatchers(HttpMethod.GET, "/api/v1/search").permitAll()
-                // Everything else requires authentication
-                .anyRequest().authenticated()
-            );
+            .authorizeHttpRequests(auth -> {
+                auth.requestMatchers(HttpMethod.GET, "/api/v1/search").permitAll();
+                if (authRequired) {
+                    auth.anyRequest().authenticated();
+                } else {
+                    auth.anyRequest().permitAll();
+                }
+            });
 
         // Add our filter before the standard username/password filter.
         // If adminApiKey is null/blank in dev mode we skip adding it (all requests pass through).
