@@ -6,13 +6,13 @@ const crawlerService = {
             throw new Error('Please enter a valid URL to crawl.');
         }
 
-        const formattedUrl = url.trim().toLowerCase();
-        if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+        const trimmedUrl = url.trim();
+        if (!trimmedUrl.toLowerCase().startsWith('http://') && !trimmedUrl.toLowerCase().startsWith('https://')) {
             throw new Error('URL must start with http:// or https://');
         }
 
         const response = await adminApiClient.post('/crawl', {
-            seedUrl: formattedUrl
+            seedUrl: trimmedUrl
         });
 
         return response;
@@ -33,6 +33,11 @@ const crawlerService = {
         const response = await adminApiClient.post('/crawl/flush-index', null, {
             timeout: 60000
         });
+        return response;
+    },
+
+    clearQueue: async () => {
+        const response = await adminApiClient.post('/crawl/clear-queue');
         return response;
     }
 };

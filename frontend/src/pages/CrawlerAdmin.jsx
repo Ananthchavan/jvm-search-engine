@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, Clock, CheckCircle, XCircle, RefreshCw, Play, Square, Database, AlertTriangle } from 'lucide-react';
+import { Activity, Clock, CheckCircle, XCircle, RefreshCw, Play, Square, Database, AlertTriangle, Trash2 } from 'lucide-react';
 import crawlerService from '../services/crawler.service';
 
 const CrawlerAdmin = () => {
@@ -8,7 +8,7 @@ const CrawlerAdmin = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [seedUrl, setSeedUrl] = useState('https://www.java.com/en/');
+    const [seedUrl, setSeedUrl] = useState('https://en.wikipedia.org/wiki/Java_(programming_language)');
     const [actionStatus, setActionStatus] = useState({ message: '', isError: false });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -58,6 +58,24 @@ const CrawlerAdmin = () => {
             setActionStatus({ message: 'Index successfully flushed to PostgreSQL.', isError: false });
         } catch (err) {
             setActionStatus({ message: 'Failed to flush index.', isError: true });
+        }
+    };
+
+    const handleClearQueue = async () => {
+        if (!window.confirm('Are you sure you want to clear the entire crawler queue?')) {
+            return;
+        }
+        setIsSubmitting(true);
+        setActionStatus({ message: 'Clearing crawler queue...', isError: false });
+        try {
+            await crawlerService.clearQueue();
+            setActionStatus({ message: 'Crawler queue successfully cleared!', isError: false });
+            setSeedUrl('https://en.wikipedia.org/wiki/Java_(programming_language)');
+            fetchData();
+        } catch (err) {
+            setActionStatus({ message: err.message || 'Failed to clear queue.', isError: true });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -117,7 +135,7 @@ const CrawlerAdmin = () => {
                                 id="seedUrl"
                                 value={seedUrl}
                                 onChange={(e) => setSeedUrl(e.target.value)}
-                                placeholder="https://www.java.com/en/"
+                                placeholder="https://en.wikipedia.org/wiki/Java_(programming_language)"
                                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 mb-3 outline-none"
                                 required
                             />
@@ -143,12 +161,12 @@ const CrawlerAdmin = () => {
                             </button>
 
                             <button
-                                disabled
-                                className="w-full flex justify-center items-center gap-2 bg-red-50 text-red-400 px-4 py-2 border border-red-100 rounded-md cursor-not-allowed"
-                                title="Stop endpoint not yet implemented in backend"
+                                onClick={handleClearQueue}
+                                disabled={isSubmitting}
+                                className="w-full flex justify-center items-center gap-2 bg-red-50 text-red-600 px-4 py-2 border border-red-200 rounded-md hover:bg-red-100 transition disabled:opacity-50"
                             >
-                                <Square size={18} />
-                                Stop Crawler
+                                <Trash2 size={18} />
+                                Clear Crawler Queue
                             </button>
                         </div>
 
