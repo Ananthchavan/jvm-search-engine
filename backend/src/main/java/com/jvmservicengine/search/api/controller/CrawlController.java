@@ -44,6 +44,12 @@ public class CrawlController {
         return ResponseEntity.ok("Index flushed to database successfully.");
     }
 
+    @PostMapping("/clear-queue")
+    public ResponseEntity<String> clearQueue() {
+        crawlerService.clearQueue();
+        return ResponseEntity.ok("Crawler queue cleared successfully.");
+    }
+
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Long>> getQueueStats() {
         return ResponseEntity.ok(Map.of(

@@ -63,6 +63,10 @@ public class CrawlerService {
         processQueue();
     }
 
+    public void clearQueue() {
+        queueService.clearQueue();
+    }
+
     @Async("crawlerTaskExecutor")
     public void processQueue() {
         log.info("Crawler Worker [{}] waking Up...", Thread.currentThread().getName());

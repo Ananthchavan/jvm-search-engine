@@ -31,7 +31,7 @@ public class DatabaseSeeder {
             SiteStatsRepository siteStatsRepository) {
 
         return args -> {
-            // Only seed if the database is empty to prevent duplicates on restart
+            // 1. Only seed initial pages/terms if pages table is empty
             if (pageRepository.count() == 0) {
                 log.info("Seeding database with test data...");
 
@@ -59,16 +59,7 @@ public class DatabaseSeeder {
                 termRepository.save(term2);
                 log.info("Saved Terms: spring, boot");
 
-                // 3. Add a URL to the Crawler Queue
-                CrawlerQueueItem queueItem = new CrawlerQueueItem();
-                queueItem.setUrl("https://www.java.com/en/");
-                queueItem.setStatus(CrawlStatus.PENDING);
-                queueItem.setPriority(10);
-                queueItem.setCrawlDepth(0);
-                crawlerQueueRepository.save(queueItem);
-                log.info("Saved Queue Item: " + queueItem.getUrl());
-
-                // 4. Initialize Site Stats
+                // 3. Initialize Site Stats
                 SiteStats stats = new SiteStats();
                 stats.setTotalPages(1L);
                 stats.setIndexedPages(1L);
@@ -77,9 +68,26 @@ public class DatabaseSeeder {
                 siteStatsRepository.save(stats);
                 log.info("Initialized Site Stats");
 
-                log.info("Database seeding completed successfully!");
+                log.info("Database pages seeding completed successfully!");
             } else {
-                log.info("Database already contains data. Skipping seed.");
+                log.info("Database already contains data. Skipping pages seed.");
+            }
+
+            // 2. Seed initial crawler queue if queue has no pending/processing items
+            long pendingCount = crawlerQueueRepository.countByStatus(CrawlStatus.PENDING);
+            long processingCount = crawlerQueueRepository.countByStatus(CrawlStatus.PROCESSING);
+            String defaultSeed = "https://en.wikipedia.org/wiki/Java_(programming_language)";
+
+            if (pendingCount == 0 && processingCount == 0 && !crawlerQueueRepository.existsByUrl(defaultSeed)) {
+                CrawlerQueueItem queueItem = new CrawlerQueueItem();
+                queueItem.setUrl(defaultSeed);
+                queueItem.setStatus(CrawlStatus.PENDING);
+                queueItem.setPriority(100);
+                queueItem.setCrawlDepth(0);
+                queueItem.setCrawlOriginHost("en.wikipedia.org");
+                queueItem.setLastCrawledAt(LocalDateTime.now());
+                crawlerQueueRepository.save(queueItem);
+                log.info("Seeded initial queue item: {}", queueItem.getUrl());
             }
         };
     }

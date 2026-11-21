@@ -148,6 +148,15 @@ public class CrawlerQueueService {
         crawlerQueueRepository.save(item);
     }
 
+    @Transactional
+    public void clearQueue() {
+        crawlerQueueRepository.deleteAll();
+        seenUrls.clear();
+        seenUrls.addAll(pageRepository.findAllUrls());
+        pagesQueuedCount.set(0);
+        log.info("Crawler queue cleared and deduplication cache reset.");
+    }
+
     private boolean isValidUrl(String url) {
         if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) {
             return false;
